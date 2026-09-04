@@ -1,0 +1,22 @@
+[
+  {"id": 1, "symbol": "BTCUSDT", "name": "Bitcoin", "ticker": "BTC"},
+  {"id": 2, "symbol": "ETHUSDT", "name": "Ethereum", "ticker": "ETH"},
+  {"id": 3, "symbol": "BNBUSDT", "name": "BNB", "ticker": "BNB"},
+  {"id": 4, "symbol": "SOLUSDT", "name": "Solana", "ticker": "SOL"},
+  {"id": 5, "symbol": "XRPUSDT", "name": "XRP", "ticker": "XRP"},
+  {"id": 6, "symbol": "ADAUSDT", "name": "Cardano", "ticker": "ADA"},
+  {"id": 7, "symbol": "DOGEUSDT", "name": "Dogecoin", "ticker": "DOGE"},
+  {"id": 8, "symbol": "AVAXUSDT", "name": "Avalanche", "ticker": "AVAX"},
+  {"id": 9, "symbol": "SHIBUSDT", "name": "Shiba Inu", "ticker": "SHIB"},
+  {"id": 10, "symbol": "LINKUSDT", "name": "Chainlink", "ticker": "LINK"},
+  {"id": 11, "symbol": "DOTUSDT", "name": "Polkadot", "ticker": "DOT"},
+  {"id": 12, "symbol": "NEARUSDT", "name": "Near Protocol", "ticker": "NEAR"},
+  {"id": 13, "symbol": "SUIUSDT", "name": "Sui", "ticker": "SUI"},
+  {"id": 14, "symbol": "POLUSDT", "name": "Polygon (POL)", "ticker": "POL"},
+  {"id": 15, "symbol": "LTCUSDT", "name": "Litecoin", "ticker": "LTC"},
+  {"id": 16, "symbol": "FETUSDT", "name": "Artificial Superintelligence", "ticker": "FET"},
+  {"id": 17, "symbol": "RENDERUSDT", "name": "Render", "ticker": "RENDER"},
+  {"id": 18, "symbol": "INJUSDT", "name": "Injective", "ticker": "INJ"},
+  {"id": 19, "symbol": "TIAUSDT", "name": "Celestia", "ticker": "TIA"},
+  {"id": 20, "symbol": "PEPEUSDT", "name": "Pepe", "ticker": "PEPE"}
+]

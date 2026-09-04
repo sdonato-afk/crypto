@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema Cripto Trading - Paper Trading OCO & Absorción de Volumen</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #03050c;
+            --bg-card: rgba(11, 16, 32, 0.85);
+            --bg-card-hover: rgba(18, 26, 50, 0.95);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --border-highlight: rgba(6, 182, 212, 0.4);
+            
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --text-dim: #64748b;
+            
+            --accent-cyan: #06b6d4;
+            --accent-cyan-glow: rgba(6, 182, 212, 0.35);
+            --accent-green: #10b981;
+            --accent-purple: #8b5cf6;
+            --accent-amber: #f59e0b;
+            --accent-rose: #f43f5e;
+            
+            --radius-lg: 16px;
+            --radius-md: 12px;
+            --radius-sm: 8px;
+            
+            --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background-color: var(--bg-dark);
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(6, 182, 212, 0.12) 0px, transparent 45%),
+                radial-gradient(at 100% 0%, rgba(139, 92, 246, 0.12) 0px, transparent 45%),
+                radial-gradient(at 50% 100%, rgba(16, 185, 129, 0.08) 0px, transparent 50%);
+            background-attachment: fixed;
+            color: var(--text-main);
+            font-family: var(--font-sans);
+            line-height: 1.5;
+            min-height: 100vh;
+            padding: 24px;
+        }
+
+        .container { max-width: 1600px; margin: 0 auto; }
+
+        header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 24px; padding-bottom: 20px;
+            border-bottom: 1px solid var(--border-color); flex-wrap: wrap; gap: 16px;
+        }
+
+        .brand { display: flex; align-items: center; gap: 16px; }
+
+        .brand-icon {
+            width: 52px; height: 52px;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+            border-radius: 14px; display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 0 26px var(--accent-cyan-glow);
+        }
+
+        .brand-icon svg { width: 28px; height: 28px; fill: #000; }
+
+        .brand-text h1 {
+            font-size: 22px; font-weight: 800; letter-spacing: -0.5px;
+            background: linear-gradient(90deg, #ffffff, #38bdf8);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            display: flex; align-items: center; gap: 10px;
+        }
+
+        .badge-paper {
+            background: rgba(16, 185, 129, 0.15); color: #34d399;
+            border: 1px solid rgba(16, 185, 129, 0.4);
+            padding: 4px 10px; border-radius: 20px; font-size: 11px;
+            font-weight: 700; font-family: var(--font-mono); text-transform: uppercase;
+        }
+
+        .btc-guard-pill {
+            display: flex; align-items: center; gap: 8px;
+            padding: 8px 16px; border-radius: 30px;
+            background: rgba(11, 16, 32, 0.8); border: 1px solid var(--border-color);
+            font-size: 13px; font-weight: 600;
+        }
+
+        .status-dot {
+            width: 10px; height: 10px; border-radius: 50%;
+            background-color: var(--accent-green);
+            box-shadow: 0 0 10px var(--accent-green);
+        }
+
+        .status-dot.panic {
+            background-color: var(--accent-rose);
+            box-shadow: 0 0 12px var(--accent-rose);
+            animation: pulse-red 1s infinite alternate;
+        }
+
+        @keyframes pulse-red {
+            from { opacity: 0.5; }
+            to { opacity: 1; }
+        }
+
+        /* Metrics Row */
+        .metrics-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 16px; margin-bottom: 24px;
+        }
+
+        .card {
+            background: var(--bg-card); border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg); padding: 20px;
+            backdrop-filter: blur(16px); position: relative; overflow: hidden;
+        }
+
+        .card-label {
+            color: var(--text-muted); font-size: 13px; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;
+        }
+
+        .card-value {
+            font-size: 26px; font-weight: 800; font-family: var(--font-mono);
+        }
+
+        .val-green { color: var(--accent-green); }
+        .val-red { color: var(--accent-rose); }
+        .val-cyan { color: var(--accent-cyan); }
+        .val-purple { color: var(--accent-purple); }
+
+        /* Main Section Grid */
+        .main-grid {
+            display: grid; grid-template-columns: 2fr 1fr; gap: 24px;
+        }
+
+        @media (max-width: 1200px) {
+            .main-grid { grid-template-columns: 1fr; }
+        }
+
+        .section-title {
+            font-size: 16px; font-weight: 700; margin-bottom: 16px;
+            display: flex; align-items: center; gap: 10px;
+        }
+
+        /* Slots Grid */
+        .slots-grid {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 14px; margin-bottom: 24px;
+        }
+
+        .slot-card {
+            background: rgba(15, 23, 42, 0.7); border: 1px solid var(--border-color);
+            border-radius: var(--radius-md); padding: 16px; transition: all 0.2s ease;
+        }
+
+        .slot-card:hover {
+            border-color: var(--border-highlight); transform: translateY(-2px);
+        }
+
+        .slot-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .slot-ticker { font-size: 18px; font-weight: 800; font-family: var(--font-mono); }
+        .slot-pnl { font-size: 16px; font-weight: 700; font-family: var(--font-mono); }
+
+        .slot-row {
+            display: flex; justify-content: space-between; font-size: 12px;
+            color: var(--text-muted); margin-bottom: 6px;
+        }
+
+        .badge-trail {
+            background: rgba(139, 92, 246, 0.2); color: #c084fc;
+            padding: 2px 8px; border-radius: 6px; font-size: 10px; font-weight: 700;
+        }
+
+        /* History Table */
+        table {
+            width: 100%; border-collapse: collapse; font-size: 13px;
+        }
+
+        th {
+            text-align: left; padding: 12px; color: var(--text-muted);
+            border-bottom: 1px solid var(--border-color); font-weight: 600;
+        }
+
+        td {
+            padding: 12px; border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            font-family: var(--font-mono);
+        }
+
+        .badge-win { color: var(--accent-green); font-weight: 700; }
+        .badge-loss { color: var(--accent-rose); font-weight: 700; }
+
+        /* Terminal Console */
+        .terminal {
+            background: #020409; border: 1px solid var(--border-color);
+            border-radius: var(--radius-md); padding: 16px; font-family: var(--font-mono);
+            font-size: 12px; color: #a3e635; height: 320px; overflow-y: auto;
+            line-height: 1.6;
+        }
+
+        .log-entry { margin-bottom: 4px; }
+        .log-time { color: var(--text-dim); }
+        .log-warn { color: var(--accent-amber); }
+        .log-close { color: #f472b6; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="brand">
+                <div class="brand-icon">
+                    <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                </div>
+                <div class="brand-text">
+                    <h1>Bot Cripto 10 Slots <span class="badge-paper">Paper Trading Real Data</span></h1>
+                    <div style="font-size: 12px; color: var(--text-muted);">Estrategia: Absorción de Volumen + OCO Server-Side + Reinversión 70/20/10</div>
+                </div>
+            </div>
+
+            <div class="btc-guard-pill" id="btcGuardContainer">
+                <div class="status-dot" id="btcStatusDot"></div>
+                <span id="btcGuardText">BTC Guard: Cargando...</span>
+            </div>
+        </header>
+
+        <!-- Top Metrics -->
+        <div class="metrics-grid">
+            <div class="card">
+                <div class="card-label">Patrimonio Total Virtual</div>
+                <div class="card-value val-cyan" id="lblTotalEquity">$1,000.00</div>
+                <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Fondo Inicial Paper: $1,000 USDT</div>
+            </div>
+            <div class="card">
+                <div class="card-label">P&L Neto Acumulado</div>
+                <div class="card-value" id="lblNetPnl">$0.00</div>
+                <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Descontando 0.075% comisiones Binance</div>
+            </div>
+            <div class="card">
+                <div class="card-label">Win Rate (Tasa Acierto)</div>
+                <div class="card-value val-purple" id="lblWinRate">0.0%</div>
+                <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;" id="lblTradesRatio">0 Wins / 0 Losses</div>
+            </div>
+            <div class="card">
+                <div class="card-label">Slots Activos</div>
+                <div class="card-value val-green" id="lblActiveSlots">0 / 10</div>
+                <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">$100 USDT por slot</div>
+            </div>
+        </div>
+
+        <!-- Modelo 70 / 20 / 10 Breakdown -->
+        <div class="metrics-grid" style="margin-bottom: 24px;">
+            <div class="card" style="border-left: 4px solid var(--accent-cyan);">
+                <div class="card-label">70% Acumulado por Reinversión</div>
+                <div class="card-value" style="font-size: 20px;" id="lblCompounded">$0.00</div>
+                <div style="font-size: 11px; color: var(--text-muted);">Sumado al capital de trabajo</div>
+            </div>
+            <div class="card" style="border-left: 4px solid var(--accent-amber);">
+                <div class="card-label">20% Cojín de Reserva</div>
+                <div class="card-value" style="font-size: 20px;" id="lblBuffer">$0.00</div>
+                <div style="font-size: 11px; color: var(--text-muted);">Protección anti-rachas perdedoras</div>
+            </div>
+            <div class="card" style="border-left: 4px solid var(--accent-green);">
+                <div class="card-label">10% Bóveda de Utilidad Intacta</div>
+                <div class="card-value" style="font-size: 20px;" id="lblVault">$0.00</div>
+                <div style="font-size: 11px; color: var(--text-muted);">Ganancia cosechada sin riesgo</div>
+            </div>
+        </div>
+
+        <!-- Main Layout -->
+        <div class="main-grid">
+            <div>
+                <!-- Active Slots Grid -->
+                <div class="section-title">
+                    <svg width="18" height="18" fill="var(--accent-cyan)" viewBox="0 0 24 24"><path d="M13 3h-2v10h2V3zm4.83 2.17l-1.42 1.42C17.99 7.86 19 9.81 19 12c0 3.87-3.13 7-7 7s-7-3.13-7-7c0-2.19 1.01-4.14 2.58-5.42L6.17 5.17C4.23 6.82 3 9.26 3 12c0 4.97 4.03 9 9 9s9-4.03 9-9c0-2.74-1.23-5.18-3.17-6.83z"/></svg>
+                    Posiciones Abiertas en Tiempo Real (Max 10 Slots OCO)
+                </div>
+
+                <div class="slots-grid" id="slotsContainer">
+                    <div style="color: var(--text-muted); font-size: 14px;">Buscando patrones de absorción de volumen en el mercado...</div>
+                </div>
+
+                <!-- Recent Trades Table -->
+                <div class="section-title" style="margin-top: 24px;">
+                    <svg width="18" height="18" fill="var(--accent-purple)" viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/></svg>
+                    Historial de Operaciones Cerradas (Paper OCO)
+                </div>
+
+                <div class="card" style="padding: 0; overflow-x: auto;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Hora</th>
+                                <th>Ticker</th>
+                                <th>Precio Entrada</th>
+                                <th>Precio Salida</th>
+                                <th>P&L Neto %</th>
+                                <th>P&L USD</th>
+                                <th>Motivo Cierre</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tradeHistoryBody">
+                            <tr><td colspan="7" style="text-align: center; color: var(--text-dim);">No hay trades cerrados aún.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Terminal Column -->
+            <div>
+                <div class="section-title">
+                    <svg width="18" height="18" fill="var(--accent-green)" viewBox="0 0 24 24"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-5 14H4v-4h11v4zm0-5H4V9h11v4zm5 5h-4V9h4v9z"/></svg>
+                    Bitácora de Ejecución en Vivo (Terminal)
+                </div>
+                <div class="terminal" id="terminalLogs">
+                    <div class="log-entry"><span class="log-time">[SISTEMA]</span> Conectando con estado de bot cripto...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function fetchBotState() {
+            try {
+                const resp = await fetch('cripto_bot_estado.json?t=' + Date.now());
+                if (!resp.ok) return;
+                const data = await resp.json();
+
+                // BTC Guard
+                const btc = data.btcGuard || { status: 'NORMAL', reason: 'BTC Estable', drop_pct: 0.0 };
+                const btcDot = document.getElementById('btcStatusDot');
+                const btcText = document.getElementById('btcGuardText');
+
+                if (btc.status === 'PANIC_LOCK') {
+                    btcDot.className = 'status-dot panic';
+                    btcText.innerHTML = `<span style="color: var(--accent-rose); font-weight: 800;">${btc.reason}</span>`;
+                } else {
+                    btcDot.className = 'status-dot';
+                    btcText.innerHTML = `<span style="color: var(--accent-green);">BTC Guard NORMAL</span> (${btc.drop_pct > 0 ? '+' : ''}${btc.drop_pct}%)`;
+                }
+
+                // Metrics
+                document.getElementById('lblTotalEquity').innerText = '$' + (data.totalEquityUsd || 1000).toLocaleString('en-US', {minimumFractionDigits: 2});
+                
+                const netPnl = data.netPnlUsd || 0;
+                const lblNet = document.getElementById('lblNetPnl');
+                lblNet.innerText = (netPnl >= 0 ? '+$' : '-$') + Math.abs(netPnl).toFixed(2);
+                lblNet.className = 'card-value ' + (netPnl >= 0 ? 'val-green' : 'val-red');
+
+                document.getElementById('lblWinRate').innerText = (data.winRate || 0) + '%';
+                document.getElementById('lblTradesRatio').innerText = `${data.totalWins || 0} Wins / ${data.totalLosses || 0} Losses`;
+                document.getElementById('lblActiveSlots').innerText = `${data.activeSlotsCount || 0} / ${data.maxSlots || 10}`;
+
+                // Capital 70-20-10
+                if (data.capitalModel) {
+                    document.getElementById('lblCompounded').innerText = '$' + data.capitalModel.compounded_70.toFixed(2);
+                    document.getElementById('lblBuffer').innerText = '$' + data.capitalModel.buffer_20.toFixed(2);
+                    document.getElementById('lblVault').innerText = '$' + data.capitalModel.vault_10.toFixed(2);
+                }
+
+                // Render Slots
+                const slotsContainer = document.getElementById('slotsContainer');
+                if (!data.active_slots || data.active_slots.length === 0) {
+                    slotsContainer.innerHTML = '<div style="color: var(--text-muted); font-size: 13px; grid-column: 1/-1;">No hay posiciones abiertas actualmente. Escaneando patrones de absorción...</div>';
+                } else {
+                    slotsContainer.innerHTML = data.active_slots.map(s => {
+                        const isWin = s.pnl_pct >= 0;
+                        const trailBadge = s.trailing_stage > 0 ? `<span class="badge-trail">Trail L${s.trailing_stage} (SL ${s.stop_loss_pct > 0 ? '+' : ''}${s.stop_loss_pct}%)</span>` : '';
+                        const currentPositionVal = (100.0 + (s.pnl_usd || 0)).toFixed(2);
+                        return `
+                            <div class="slot-card" style="border: 1px solid rgba(6, 182, 212, 0.3);">
+                                <div class="slot-header">
+                                    <div>
+                                        <span class="slot-ticker" style="font-size: 20px;">${s.ticker}</span>
+                                        <span style="font-size: 11px; color: var(--text-muted); margin-left: 6px;">Score: ${s.score || 70}</span>
+                                    </div>
+                                    <div class="slot-pnl ${isWin ? 'val-green' : 'val-red'}" style="font-size: 18px;">${isWin ? '+' : ''}${s.pnl_pct}%</div>
+                                </div>
+                                <div style="background: rgba(6, 182, 212, 0.08); border: 1px solid rgba(6, 182, 212, 0.25); padding: 8px 12px; border-radius: 8px; margin: 10px 0; display: flex; justify-content: space-between; align-items: center;">
+                                    <div>
+                                        <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">VALOR EN VIVO DE POSICIÓN</div>
+                                        <div class="${isWin ? 'val-green' : 'val-red'}" style="font-size: 18px; font-weight: 800; font-family: var(--font-mono);">$${currentPositionVal} USDT</div>
+                                    </div>
+                                    <div style="text-align: right;">
+                                        <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">CAPITAL SLOT</div>
+                                        <div style="font-size: 13px; font-weight: 700; font-family: var(--font-mono);">$100.00 USDT</div>
+                                    </div>
+                                </div>
+                                <div class="slot-row">
+                                    <span>Precio Entrada: $${s.entry_price}</span>
+                                    <span>Precio Actual: $${s.current_price}</span>
+                                </div>
+                                <div class="slot-row" style="margin-top: 6px;">
+                                    <span>P&L Flotante USD: <strong class="${isWin ? 'val-green' : 'val-red'}">${isWin ? '+$' : '-$'}${Math.abs(s.pnl_usd || 0).toFixed(2)}</strong></span>
+                                    ${trailBadge}
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                }
+
+                // Render History
+                const tbody = document.getElementById('tradeHistoryBody');
+                if (data.trade_history && data.trade_history.length > 0) {
+                    tbody.innerHTML = data.trade_history.slice(0, 10).map(t => {
+                        const isWin = t.result === 'WIN';
+                        return `
+                            <tr>
+                                <td>${t.timestamp.split(' ')[1]}</td>
+                                <td><strong>${t.ticker}</strong></td>
+                                <td>$${t.entry_price}</td>
+                                <td>$${t.exit_price}</td>
+                                <td class="${isWin ? 'badge-win' : 'badge-loss'}">${isWin ? '+' : ''}${t.pnl_pct}%</td>
+                                <td class="${isWin ? 'badge-win' : 'badge-loss'}">${isWin ? '+' : ''}$${t.pnl_usd}</td>
+                                <td><span style="font-size: 11px; opacity: 0.8;">${t.reason}</span></td>
+                            </tr>
+                        `;
+                    }).join('');
+                }
+
+            } catch (e) {
+                console.log("Esperando estado de bot...", e);
+            }
+        }
+
+        setInterval(fetchBotState, 3000);
+        fetchBotState();
+    </script>
+</body>
+</html>
