@@ -94,36 +94,75 @@ class BinanceBotEngine:
         if data:
             self.active_slots = data.get("active_slots", [])
             self.trade_history = data.get("trade_history", [])
-            self.net_pnl_usd = data.get("net_pnl_usd", 0.0)
-            self.operating_capital_usd = data.get("operating_capital_usd", 1000.0)
             
             # Recalcular Wins y Losses dinámicamente desde el historial real de trades
             self.total_wins = sum(1 for t in self.trade_history if t.get("result") == "WIN")
             self.total_losses = sum(1 for t in self.trade_history if t.get("result") == "LOSS")
 
-            cap_model = data.get("capitalModel", {})
-            self.reinvested_70_usd = cap_model.get("compounded_70", 0.0)
-            self.drawdown_buffer_usd = cap_model.get("buffer_20", 0.0)
-            self.profit_vault_usd = cap_model.get("vault_10", 0.0)
-            log_message("INFO", f"Estado cargado: {self.total_wins} Wins / {self.total_losses} Losses.")
+            # P&L Realizado Inmutable desde el historial
+            self.realized_pnl_usd = sum(t.get("pnl_usd", 0.0) for t in self.trade_history)
+
+            # Acumuladores del modelo 70 / 20 / 10
+            win_profits = sum(t.get("pnl_usd", 0.0) for t in self.trade_history if t.get("pnl_usd", 0.0) > 0)
+            loss_totals = abs(sum(t.get("pnl_usd", 0.0) for t in self.trade_history if t.get("pnl_usd", 0.0) < 0))
+
+            self.reinvested_70_usd = round(win_profits * 0.70, 2)
+            self.profit_vault_usd = round(win_profits * 0.10, 2)
+            
+            potential_buffer = win_profits * 0.20
+            if potential_buffer >= loss_totals:
+                self.drawdown_buffer_usd = round(potential_buffer - loss_totals, 2)
+                unabsorbed_loss = 0.0
+            else:
+                self.drawdown_buffer_usd = 0.0
+                unabsorbed_loss = loss_totals - potential_buffer
+
+            self.operating_capital_usd = round(INITIAL_CAPITAL_USD + self.reinvested_70_usd - unabsorbed_loss, 2)
+            log_message("INFO", f"Estado cargado: {self.total_wins} Wins / {self.total_losses} Losses | PnL Realizado: ${self.realized_pnl_usd:.2f} USD")
             return
 
         self.active_slots = []
+        self.trade_history = []
+        self.realized_pnl_usd = 0.0
+        self.operating_capital_usd = INITIAL_CAPITAL_USD
+        self.reinvested_70_usd = 0.0
+        self.drawdown_buffer_usd = 0.0
+        self.profit_vault_usd = 0.0
 
     def save_state(self):
-        # Garantizar sincronización exacta de victorias y derrotas desde el historial
+        # 1. Garantizar recuento exacto de victorias y derrotas desde el historial
         self.total_wins = sum(1 for t in self.trade_history if t.get("result") == "WIN")
         self.total_losses = sum(1 for t in self.trade_history if t.get("result") == "LOSS")
 
         total_trades = self.total_wins + self.total_losses
         win_rate = (self.total_wins / total_trades * 100.0) if total_trades > 0 else 0.0
         
-        # P&L Flotante (Ganancia/Pérdida no realizada de posiciones abiertas)
-        floating_pnl_usd = sum(slot.get("pnl_usd", 0.0) for slot in self.active_slots)
+        # 2. P&L Realizado Inmutable (Suma exacta de trades cerrados)
+        realized_pnl = sum(t.get("pnl_usd", 0.0) for t in self.trade_history)
         
-        # Patrimonio Mark-to-Market en Tiempo Real (Realizado + Flotante)
-        total_equity = self.operating_capital_usd + self.drawdown_buffer_usd + self.profit_vault_usd + floating_pnl_usd
-        total_net_pnl = self.net_pnl_usd + floating_pnl_usd
+        # 3. P&L Flotante (Suma exacta de posiciones abiertas)
+        floating_pnl = sum(slot.get("pnl_usd", 0.0) for slot in self.active_slots)
+        
+        # 4. P&L Neto Total y Patrimonio Inmutable (INITIAL_CAPITAL + net_pnl)
+        total_net_pnl = realized_pnl + floating_pnl
+        total_equity = INITIAL_CAPITAL_USD + total_net_pnl
+
+        # 5. Modelo 70 / 20 / 10 Recalculado
+        win_profits = sum(t.get("pnl_usd", 0.0) for t in self.trade_history if t.get("pnl_usd", 0.0) > 0)
+        loss_totals = abs(sum(t.get("pnl_usd", 0.0) for t in self.trade_history if t.get("pnl_usd", 0.0) < 0))
+
+        reinvested_70 = round(win_profits * 0.70, 2)
+        vault_10 = round(win_profits * 0.10, 2)
+        potential_buffer = win_profits * 0.20
+
+        if potential_buffer >= loss_totals:
+            buffer_20 = round(potential_buffer - loss_totals, 2)
+            unabsorbed_loss = 0.0
+        else:
+            buffer_20 = 0.0
+            unabsorbed_loss = loss_totals - potential_buffer
+
+        operating_capital = round(INITIAL_CAPITAL_USD + reinvested_70 - unabsorbed_loss, 2)
 
         state = {
             "botStatus": "PAPER_TRADING_OCO_ACTIVO",
@@ -136,15 +175,15 @@ class BinanceBotEngine:
             "totalLosses": self.total_losses,
             "winRate": round(win_rate, 1),
             "netPnlUsd": round(total_net_pnl, 2),
-            "realizedPnlUsd": round(self.net_pnl_usd, 2),
-            "floatingPnlUsd": round(floating_pnl_usd, 2),
+            "realizedPnlUsd": round(realized_pnl, 2),
+            "floatingPnlUsd": round(floating_pnl, 2),
             "totalEquityUsd": round(total_equity, 2),
-            "operating_capital_usd": round(self.operating_capital_usd, 2),
+            "operating_capital_usd": operating_capital,
             "capitalModel": {
-                "operating_100": round(self.operating_capital_usd, 2),
-                "compounded_70": round(self.reinvested_70_usd, 2),
-                "buffer_20": round(self.drawdown_buffer_usd, 2),
-                "vault_10": round(self.profit_vault_usd, 2)
+                "operating_100": operating_capital,
+                "compounded_70": reinvested_70,
+                "buffer_20": buffer_20,
+                "vault_10": vault_10
             },
             "active_slots": self.active_slots,
             "trade_history": self.trade_history
