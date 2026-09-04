@@ -70,27 +70,44 @@ class BinanceBotEngine:
         return []
 
     def load_state(self):
+        data = None
+        
+        # 1. Si existe archivo de estado local, cargarlo
         if os.path.exists(STATE_FILE):
             try:
                 with open(STATE_FILE, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                    self.active_slots = data.get("active_slots", [])
-                    self.trade_history = data.get("trade_history", [])
-                    self.net_pnl_usd = data.get("net_pnl_usd", 0.0)
-                    self.operating_capital_usd = data.get("operating_capital_usd", 1000.0)
-                    
-                    # Recalcular Wins y Losses dinámicamente desde el historial real de trades
-                    self.total_wins = sum(1 for t in self.trade_history if t.get("result") == "WIN")
-                    self.total_losses = sum(1 for t in self.trade_history if t.get("result") == "LOSS")
+            except Exception:
+                data = None
 
-                    cap_model = data.get("capitalModel", {})
-                    self.reinvested_70_usd = cap_model.get("compounded_70", 0.0)
-                    self.drawdown_buffer_usd = cap_model.get("buffer_20", 0.0)
-                    self.profit_vault_usd = cap_model.get("vault_10", 0.0)
-                    log_message("INFO", "Estado del Bot Cripto cargado exitosamente.")
-                    return
+        # 2. Si es Render y no hay data local o está vacía, intentar recuperar desde GitHub Raw
+        if not data and "RENDER" in os.environ:
+            try:
+                raw_url = "https://raw.githubusercontent.com/sdonato-afk/crypto/main/cripto_bot_estado.json"
+                req = urllib.request.Request(raw_url, headers={'User-Agent': 'Mozilla/5.0'})
+                with urllib.request.urlopen(req, timeout=5) as resp:
+                    data = json.loads(resp.read().decode('utf-8'))
+                    log_message("INFO", "Estado del Bot Cripto recuperado desde GitHub Cloud con éxito.")
             except Exception as e:
-                log_message("WARN", f"Error al cargar estado ({e}). Inicializando slots vacíos.")
+                log_message("WARN", f"No se pudo cargar estado remoto desde GitHub ({e})")
+
+        if data:
+            self.active_slots = data.get("active_slots", [])
+            self.trade_history = data.get("trade_history", [])
+            self.net_pnl_usd = data.get("net_pnl_usd", 0.0)
+            self.operating_capital_usd = data.get("operating_capital_usd", 1000.0)
+            
+            # Recalcular Wins y Losses dinámicamente desde el historial real de trades
+            self.total_wins = sum(1 for t in self.trade_history if t.get("result") == "WIN")
+            self.total_losses = sum(1 for t in self.trade_history if t.get("result") == "LOSS")
+
+            cap_model = data.get("capitalModel", {})
+            self.reinvested_70_usd = cap_model.get("compounded_70", 0.0)
+            self.drawdown_buffer_usd = cap_model.get("buffer_20", 0.0)
+            self.profit_vault_usd = cap_model.get("vault_10", 0.0)
+            log_message("INFO", f"Estado cargado: {self.total_wins} Wins / {self.total_losses} Losses.")
+            return
+
         self.active_slots = []
 
     def save_state(self):
