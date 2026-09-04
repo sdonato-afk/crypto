@@ -150,30 +150,40 @@
 
         /* Slots Grid */
         .slots-grid {
-            display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-            gap: 14px; margin-bottom: 24px;
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(235px, 1fr));
+            gap: 12px; margin-bottom: 24px;
         }
 
         .slot-card {
-            background: rgba(15, 23, 42, 0.7); border: 1px solid var(--border-color);
-            border-radius: var(--radius-md); padding: 16px; transition: all 0.2s ease;
+            background: rgba(11, 16, 32, 0.85);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px; padding: 12px 14px;
+            backdrop-filter: blur(16px);
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
         }
 
         .slot-card:hover {
-            border-color: var(--border-highlight); transform: translateY(-2px);
+            border-color: rgba(6, 182, 212, 0.4);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
         }
 
         .slot-header {
             display: flex; justify-content: space-between; align-items: center;
-            margin-bottom: 12px;
+            margin-bottom: 8px;
         }
 
-        .slot-ticker { font-size: 18px; font-weight: 800; font-family: var(--font-mono); }
-        .slot-pnl { font-size: 16px; font-weight: 700; font-family: var(--font-mono); }
+        .slot-ticker { font-size: 16px; font-weight: 800; font-family: var(--font-mono); letter-spacing: -0.3px; }
+        .slot-pnl-pill {
+            padding: 2px 8px; border-radius: 6px; font-size: 13px; font-weight: 800; font-family: var(--font-mono);
+        }
+        .slot-pnl-pill.win { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
+        .slot-pnl-pill.loss { background: rgba(244, 63, 94, 0.15); color: #fb7185; border: 1px solid rgba(244, 63, 94, 0.3); }
 
         .slot-row {
-            display: flex; justify-content: space-between; font-size: 12px;
-            color: var(--text-muted); margin-bottom: 6px;
+            display: flex; justify-content: space-between; font-size: 11px;
+            color: var(--text-muted); margin-bottom: 4px; font-family: var(--font-mono);
         }
 
         .badge-trail {
@@ -373,33 +383,33 @@
                 } else {
                     slotsContainer.innerHTML = data.active_slots.map(s => {
                         const isWin = s.pnl_pct >= 0;
-                        const trailBadge = s.trailing_stage > 0 ? `<span class="badge-trail">Trail L${s.trailing_stage} (SL ${s.stop_loss_pct > 0 ? '+' : ''}${s.stop_loss_pct}%)</span>` : '';
+                        const trailBadge = s.trailing_stage > 0 ? `<span class="badge-trail">Trail L${s.trailing_stage}</span>` : '';
                         const currentPositionVal = (100.0 + (s.pnl_usd || 0)).toFixed(2);
                         return `
-                            <div class="slot-card" style="border: 1px solid rgba(6, 182, 212, 0.3);">
+                            <div class="slot-card">
                                 <div class="slot-header">
-                                    <div>
-                                        <span class="slot-ticker" style="font-size: 20px;">${s.ticker}</span>
-                                        <span style="font-size: 11px; color: var(--text-muted); margin-left: 6px;">Score: ${s.score || 70}</span>
+                                    <div style="display: flex; align-items: center; gap: 6px;">
+                                        <span class="slot-ticker">${s.ticker}</span>
+                                        <span style="font-size: 9px; color: var(--text-dim); background: rgba(255,255,255,0.05); padding: 1px 4px; border-radius: 4px;">S:${s.score || 70}</span>
                                     </div>
-                                    <div class="slot-pnl ${isWin ? 'val-green' : 'val-red'}" style="font-size: 18px;">${isWin ? '+' : ''}${s.pnl_pct}%</div>
+                                    <div class="slot-pnl-pill ${isWin ? 'win' : 'loss'}">${isWin ? '+' : ''}${s.pnl_pct}%</div>
                                 </div>
-                                <div style="background: rgba(6, 182, 212, 0.08); border: 1px solid rgba(6, 182, 212, 0.25); padding: 8px 12px; border-radius: 8px; margin: 10px 0; display: flex; justify-content: space-between; align-items: center;">
+                                <div style="background: rgba(6, 182, 212, 0.06); border: 1px solid rgba(6, 182, 212, 0.2); padding: 6px 10px; border-radius: 8px; margin: 8px 0; display: flex; justify-content: space-between; align-items: center;">
                                     <div>
-                                        <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">VALOR EN VIVO DE POSICIÓN</div>
-                                        <div class="${isWin ? 'val-green' : 'val-red'}" style="font-size: 18px; font-weight: 800; font-family: var(--font-mono);">$${currentPositionVal} USDT</div>
+                                        <div style="font-size: 9px; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">VALOR EN VIVO</div>
+                                        <div class="${isWin ? 'val-green' : 'val-red'}" style="font-size: 15px; font-weight: 800; font-family: var(--font-mono);">$${currentPositionVal}</div>
                                     </div>
                                     <div style="text-align: right;">
-                                        <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">CAPITAL SLOT</div>
-                                        <div style="font-size: 13px; font-weight: 700; font-family: var(--font-mono);">$100.00 USDT</div>
+                                        <div style="font-size: 9px; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">BASE</div>
+                                        <div style="font-size: 12px; font-weight: 700; font-family: var(--font-mono); color: var(--text-main);">$100.00</div>
                                     </div>
                                 </div>
                                 <div class="slot-row">
-                                    <span>Precio Entrada: $${s.entry_price}</span>
-                                    <span>Precio Actual: $${s.current_price}</span>
+                                    <span>Entrada: $${s.entry_price}</span>
+                                    <span>Actual: $${s.current_price}</span>
                                 </div>
-                                <div class="slot-row" style="margin-top: 6px;">
-                                    <span>P&L Flotante USD: <strong class="${isWin ? 'val-green' : 'val-red'}">${isWin ? '+$' : '-$'}${Math.abs(s.pnl_usd || 0).toFixed(2)}</strong></span>
+                                <div class="slot-row" style="margin-top: 4px;">
+                                    <span>Flotante: <strong class="${isWin ? 'val-green' : 'val-red'}">${isWin ? '+$' : '-$'}${Math.abs(s.pnl_usd || 0).toFixed(2)} USD</strong></span>
                                     ${trailBadge}
                                 </div>
                             </div>

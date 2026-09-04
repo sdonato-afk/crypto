@@ -14,6 +14,17 @@ class TelegramNotifier:
         self.load_config()
 
     def load_config(self):
+        # 1. Intentar cargar desde variables de entorno (Ideal para Render.com / Cloud)
+        env_token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+        env_chat = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
+
+        if env_token and env_chat:
+            self.bot_token = env_token
+            self.chat_id = env_chat
+            self.enabled = True
+            return
+
+        # 2. Si no hay variables de entorno, cargar desde archivo local json
         if os.path.exists(TELEGRAM_CONFIG_FILE):
             try:
                 with open(TELEGRAM_CONFIG_FILE, "r", encoding="utf-8") as f:
