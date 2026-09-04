@@ -369,10 +369,11 @@
                 const activeSlots = data.active_slots || [];
                 const grossAssetsVal = data.grossAssetsUsd !== undefined 
                     ? data.grossAssetsUsd 
-                    : activeSlots.reduce((acc, s) => acc + 100.0 + (s.pnl_usd || 0), 0);
+                    : activeSlots.reduce((acc, s) => acc + (s.allocated_capital_usd || 100.0) + (s.pnl_usd || 0), 0);
                 
+                const avgBasePerSlot = data.operating_capital_usd ? (data.operating_capital_usd / 10).toFixed(2) : '100.00';
                 document.getElementById('lblGrossAssets').innerText = '$' + grossAssetsVal.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-                document.getElementById('lblGrossSubtext').innerText = `${activeSlots.length} Slots x $100 base + Flotante`;
+                document.getElementById('lblGrossSubtext').innerText = `${activeSlots.length} Slots (Capital Fluido: ~$${avgBasePerSlot}/slot)`;
 
                 const netPnl = data.netPnlUsd || 0;
                 const lblNet = document.getElementById('lblNetPnl');
@@ -398,7 +399,8 @@
                     slotsContainer.innerHTML = data.active_slots.map(s => {
                         const isWin = s.pnl_pct >= 0;
                         const trailBadge = s.trailing_stage > 0 ? `<span class="badge-trail">Trail L${s.trailing_stage}</span>` : '';
-                        const currentPositionVal = (100.0 + (s.pnl_usd || 0)).toFixed(2);
+                        const slotBase = s.allocated_capital_usd || (data.operating_capital_usd ? (data.operating_capital_usd / 10) : 100.0);
+                        const currentPositionVal = (slotBase + (s.pnl_usd || 0)).toFixed(2);
                         return `
                             <div class="slot-card">
                                 <div class="slot-header">
@@ -415,7 +417,7 @@
                                     </div>
                                     <div style="text-align: right;">
                                         <div style="font-size: 9px; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">BASE</div>
-                                        <div style="font-size: 12px; font-weight: 700; font-family: var(--font-mono); color: var(--text-main);">$100.00</div>
+                                        <div style="font-size: 12px; font-weight: 700; font-family: var(--font-mono); color: var(--text-main);">$${slotBase.toFixed(2)}</div>
                                     </div>
                                 </div>
                                 <div class="slot-row">

@@ -140,9 +140,13 @@ class BinanceBotEngine:
         # 2. P&L Realizado Inmutable (Suma exacta de trades cerrados)
         realized_pnl = sum(t.get("pnl_usd", 0.0) for t in self.trade_history)
         
-        # 3. P&L Flotante (Suma exacta de posiciones abiertas)
+        # 3. P&L Flotante (Suma exacta de posiciones abiertas con capital fluido)
+        for slot in self.active_slots:
+            if "allocated_capital_usd" not in slot:
+                slot["allocated_capital_usd"] = round(self.operating_capital_usd / MAX_SLOTS, 2)
+
         floating_pnl = sum(slot.get("pnl_usd", 0.0) for slot in self.active_slots)
-        gross_assets = sum(100.0 + slot.get("pnl_usd", 0.0) for slot in self.active_slots)
+        gross_assets = sum(slot.get("allocated_capital_usd", 100.0) + slot.get("pnl_usd", 0.0) for slot in self.active_slots)
         
         # 4. P&L Neto Total y Patrimonio Inmutable (INITIAL_CAPITAL + net_pnl)
         total_net_pnl = realized_pnl + floating_pnl
@@ -208,9 +212,10 @@ class BinanceBotEngine:
             raw_pnl_pct = ((current_price - entry_price) / entry_price) * 100.0
             net_pnl_pct = raw_pnl_pct - (BINANCE_FEE_PCT * 2)
 
+            slot_base = slot.get("allocated_capital_usd", round(self.operating_capital_usd / MAX_SLOTS, 2))
             slot["current_price"] = current_price
             slot["pnl_pct"] = round(net_pnl_pct, 2)
-            slot["pnl_usd"] = round(CAPITAL_PER_SLOT_USD * (net_pnl_pct / 100.0), 2)
+            slot["pnl_usd"] = round(slot_base * (net_pnl_pct / 100.0), 2)
 
             # 1. Trailing Stop - Escalón 1 (+3.0% -> Mover SL a Breakeven +0.2%)
             if raw_pnl_pct >= TRAILING_STAGE_1 and slot.get("trailing_stage", 0) < 1:
@@ -236,7 +241,9 @@ class BinanceBotEngine:
         self.active_slots = remaining_slots
 
     def close_slot(self, slot, reason, final_net_pnl_pct):
-        pnl_usd = CAPITAL_PER_SLOT_USD * (final_net_pnl_pct / 100.0)
+        slot_base = slot.get("allocated_capital_usd", round(self.operating_capital_usd / MAX_SLOTS, 2))
+        pnl_usd = slot_base * (final_net_pnl_pct / 100.0)
+        self.net_pnl_usd += pnl_usd
         self.net_pnl_usd += pnl_usd
 
         # Aplicar Regla de Reinversión 70 / 20 / 10 sobre la utilidad generada
@@ -297,6 +304,7 @@ class BinanceBotEngine:
 
             # Requiere Score >= 68.0 (Señales de Absorción de Volumen)
             if ticker not in open_tickers and score >= 68.0 and analysis["price"] > 0:
+                slot_capital = round(self.operating_capital_usd / MAX_SLOTS, 2)
                 new_slot = {
                     "id": int(time.time() * 1000),
                     "ticker": ticker,
@@ -304,6 +312,7 @@ class BinanceBotEngine:
                     "entry_time": timestamp(),
                     "entry_price": analysis["price"],
                     "current_price": analysis["price"],
+                    "allocated_capital_usd": slot_capital,
                     "take_profit_pct": TAKE_PROFIT_PCT,
                     "stop_loss_pct": -STOP_LOSS_PCT,
                     "trailing_stage": 0,
