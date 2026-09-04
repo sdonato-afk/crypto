@@ -76,11 +76,13 @@ class BinanceBotEngine:
                     data = json.load(f)
                     self.active_slots = data.get("active_slots", [])
                     self.trade_history = data.get("trade_history", [])
-                    self.total_wins = data.get("total_wins", 0)
-                    self.total_losses = data.get("total_losses", 0)
                     self.net_pnl_usd = data.get("net_pnl_usd", 0.0)
                     self.operating_capital_usd = data.get("operating_capital_usd", 1000.0)
                     
+                    # Recalcular Wins y Losses dinámicamente desde el historial real de trades
+                    self.total_wins = sum(1 for t in self.trade_history if t.get("result") == "WIN")
+                    self.total_losses = sum(1 for t in self.trade_history if t.get("result") == "LOSS")
+
                     cap_model = data.get("capitalModel", {})
                     self.reinvested_70_usd = cap_model.get("compounded_70", 0.0)
                     self.drawdown_buffer_usd = cap_model.get("buffer_20", 0.0)
@@ -92,6 +94,10 @@ class BinanceBotEngine:
         self.active_slots = []
 
     def save_state(self):
+        # Garantizar sincronización exacta de victorias y derrotas desde el historial
+        self.total_wins = sum(1 for t in self.trade_history if t.get("result") == "WIN")
+        self.total_losses = sum(1 for t in self.trade_history if t.get("result") == "LOSS")
+
         total_trades = self.total_wins + self.total_losses
         win_rate = (self.total_wins / total_trades * 100.0) if total_trades > 0 else 0.0
         

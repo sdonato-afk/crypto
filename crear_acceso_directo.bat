@@ -1,20 +1,20 @@
 @echo off
-title Crear Acceso Directo del Sistema Cripto Trading
+title Actualizar Acceso Directo a la Nube (Render)
 color 0B
 
 cd /d "%~dp0"
 
 echo =================================================================
-echo   [+] INSTALADOR DE ACCESO DIRECTO EN ESCRITORIO (CRIPTO TRADING)
+echo   [+] INSTALADOR DE ACCESO DIRECTO CLOUD EN ESCRITORIO
 echo =================================================================
 echo.
-echo Creando acceso directo en el Escritorio...
+echo Vinculando icono a tu servidor 24/7 en Render...
 
-powershell -ExecutionPolicy Bypass -Command "$desktop = [System.Environment]::GetFolderPath('Desktop'); $shortcutPath = Join-Path -Path $desktop -ChildPath 'Sistema Cripto Trading (Top 20).lnk'; $wshell = New-Object -ComObject WScript.Shell; $s = $wshell.CreateShortcut($shortcutPath); $s.TargetPath = '%~dp0iniciar_cripto_bot.bat'; $s.WorkingDirectory = '%~dp0'; $s.Description = 'Sistema Cripto Trading v1.0 - Bot Binance 10 Slots (+6% TP / -2% SL)'; $s.Save(); Write-Host 'Acceso directo creado con éxito!'"
+powershell -ExecutionPolicy Bypass -Command "$desktop = [System.Environment]::GetFolderPath('Desktop'); $shortcutPath = Join-Path -Path $desktop -ChildPath 'Sistema Cripto Trading (Top 20).lnk'; $wshell = New-Object -ComObject WScript.Shell; $s = $wshell.CreateShortcut($shortcutPath); $s.TargetPath = 'https://crypto-3d7e.onrender.com/dashboard_cripto.html'; $s.Description = 'Sistema Cripto Trading 24/7 en la Nube (Render Cloud)'; $s.Save(); Write-Host 'Acceso directo a la Nube actualizado con éxito!'"
 
 echo.
 echo =================================================================
-echo   ¡Listo! Se ha creado el icono 'Sistema Cripto Trading (Top 20)'
-echo   en el Escritorio de esta computadora.
+echo   ¡Listo! El icono 'Sistema Cripto Trading (Top 20)' en tu
+echo   Escritorio ahora abre directamente tu servidor 24/7 en Render.
 echo =================================================================
 echo.
