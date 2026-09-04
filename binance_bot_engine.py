@@ -142,6 +142,7 @@ class BinanceBotEngine:
         
         # 3. P&L Flotante (Suma exacta de posiciones abiertas)
         floating_pnl = sum(slot.get("pnl_usd", 0.0) for slot in self.active_slots)
+        gross_assets = sum(100.0 + slot.get("pnl_usd", 0.0) for slot in self.active_slots)
         
         # 4. P&L Neto Total y Patrimonio Inmutable (INITIAL_CAPITAL + net_pnl)
         total_net_pnl = realized_pnl + floating_pnl
@@ -177,6 +178,7 @@ class BinanceBotEngine:
             "netPnlUsd": round(total_net_pnl, 2),
             "realizedPnlUsd": round(realized_pnl, 2),
             "floatingPnlUsd": round(floating_pnl, 2),
+            "grossAssetsUsd": round(gross_assets, 2),
             "totalEquityUsd": round(total_equity, 2),
             "operating_capital_usd": operating_capital,
             "capitalModel": {

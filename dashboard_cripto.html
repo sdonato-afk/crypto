@@ -249,6 +249,11 @@
                 <div class="card-value val-cyan" id="lblTotalEquity">$1,000.00</div>
                 <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Fondo Inicial Paper: $1,000 USDT</div>
             </div>
+            <div class="card" style="border: 1px solid rgba(245, 158, 11, 0.4);">
+                <div class="card-label">Valor Real de los Activos</div>
+                <div class="card-value val-amber" id="lblGrossAssets">$0.00</div>
+                <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;" id="lblGrossSubtext">Posiciones en vivo + P&L Flotante</div>
+            </div>
             <div class="card">
                 <div class="card-label">P&L Neto Acumulado</div>
                 <div class="card-value" id="lblNetPnl">$0.00</div>
@@ -358,8 +363,17 @@
                 }
 
                 // Metrics
-                document.getElementById('lblTotalEquity').innerText = '$' + (data.totalEquityUsd || 1000).toLocaleString('en-US', {minimumFractionDigits: 2});
+                document.getElementById('lblTotalEquity').innerText = '$' + (data.totalEquityUsd || 1000).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
                 
+                // Valor Real de los Activos Abiertos
+                const activeSlots = data.active_slots || [];
+                const grossAssetsVal = data.grossAssetsUsd !== undefined 
+                    ? data.grossAssetsUsd 
+                    : activeSlots.reduce((acc, s) => acc + 100.0 + (s.pnl_usd || 0), 0);
+                
+                document.getElementById('lblGrossAssets').innerText = '$' + grossAssetsVal.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                document.getElementById('lblGrossSubtext').innerText = `${activeSlots.length} Slots x $100 base + Flotante`;
+
                 const netPnl = data.netPnlUsd || 0;
                 const lblNet = document.getElementById('lblNetPnl');
                 lblNet.innerText = (netPnl >= 0 ? '+$' : '-$') + Math.abs(netPnl).toFixed(2);
