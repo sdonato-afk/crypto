@@ -1,5 +1,5 @@
-# binance_bot_engine.py - Motor de Trading Multi-Posición (10 Slots Simultáneos)
-# Arquitectura: Paper Trading en Vivo / Órdenes OCO Nativas / Trailing Escalonado / Reinversión 70-20-10
+# binance_bot_engine.py - Motor de Trading Multi-Posición (10 Slots Simultáneos - Escenario 3 Definitivo)
+# Arquitectura: Paper Trading Top 50-100 / Entrada 50%+10% Escalonada / OCO TP +9% SL -4% / Trailing / Reinversión 70-20-10
 
 import time
 import json
@@ -7,26 +7,23 @@ import os
 from datetime import datetime
 from crypto_analyzer import CryptoAnalyzer
 from telegram_notifier import TelegramNotifier
-
+import urllib.request
 import sys
 
-# Forzar salida en UTF-8 para consola de Windows
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8')
 
 STATE_FILE = "cripto_bot_estado.json"
-TOP_20_FILE = "top_20_criptos.json"
 LOG_FILE = "cripto_bot_ejecucion.log"
 
 MAX_SLOTS = 10
-TAKE_PROFIT_PCT = 6.0
-STOP_LOSS_PCT = 2.0
-TRAILING_STAGE_1 = 3.0  # Mueve SL a Breakeven +0.2% (cubre comisiones de Binance)
-TRAILING_STAGE_2 = 4.5  # Mueve SL a +2.5% (Asegura ganancia)
-BINANCE_FEE_PCT = 0.075 # Comisión Taker/Maker en Binance usando BNB discount
+TAKE_PROFIT_PCT = 9.0
+STOP_LOSS_PCT = 4.0
+TRAILING_STAGE_1 = 4.0  # Mueve SL a Breakeven +0.3%
+TRAILING_STAGE_2 = 6.5  # Mueve SL a +4.0% Lock de ganancia
+BINANCE_FEE_PCT = 0.024 # Tarifas optimizadas con descuento BNB + Maker Limit Orders + Kickback
 
-INITIAL_CAPITAL_USD = 1000.0 # $1,000 USDT de Capital de Prueba Virtual
-CAPITAL_PER_SLOT_USD = 100.0  # $100 USDT por slot (10 slots)
+INITIAL_CAPITAL_USD = 1000.0
 
 def timestamp():
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -46,33 +43,21 @@ class BinanceBotEngine:
         self.telegram = TelegramNotifier()
         self.active_slots = []
         self.trade_history = []
-        self.top_20_list = self.load_top_20()
         self.total_wins = 0
         self.total_losses = 0
         
-        # Capital Inicial $1,000 USD (Operativo 100%)
         self.operating_capital_usd = 1000.0
-        self.reinvested_70_usd = 0.0      # 70% Acumulado de ganancias reinvertidas
-        self.drawdown_buffer_usd = 0.0    # 20% Cojín de reserva acumulado
-        self.profit_vault_usd = 0.0       # 10% Bóveda de utilidades cosechadas
+        self.reinvested_70_usd = 0.0
+        self.drawdown_buffer_usd = 0.0
+        self.profit_vault_usd = 0.0
         self.net_pnl_usd = 0.0
+        self.last_closed_timestamps = {} # ticker: timestamp epoch
 
         self.btc_guard_status = {"status": "NORMAL", "reason": "Iniciando bot", "drop_pct": 0.0}
         self.load_state()
 
-    def load_top_20(self):
-        if os.path.exists(TOP_20_FILE):
-            try:
-                with open(TOP_20_FILE, "r", encoding="utf-8") as f:
-                    return json.load(f)
-            except Exception:
-                pass
-        return []
-
     def load_state(self):
         data = None
-        
-        # 1. Si existe archivo de estado local, cargarlo
         if os.path.exists(STATE_FILE):
             try:
                 with open(STATE_FILE, "r", encoding="utf-8") as f:
@@ -80,36 +65,30 @@ class BinanceBotEngine:
             except Exception:
                 data = None
 
-        # 2. Si es Render y no hay data local o está vacía, intentar recuperar desde GitHub Raw
         if not data and "RENDER" in os.environ:
             try:
                 raw_url = "https://raw.githubusercontent.com/sdonato-afk/crypto/main/cripto_bot_estado.json"
                 req = urllib.request.Request(raw_url, headers={'User-Agent': 'Mozilla/5.0'})
                 with urllib.request.urlopen(req, timeout=5) as resp:
                     data = json.loads(resp.read().decode('utf-8'))
-                    log_message("INFO", "Estado del Bot Cripto recuperado desde GitHub Cloud con éxito.")
+                    log_message("INFO", "Estado recuperado desde GitHub Cloud con éxito.")
             except Exception as e:
                 log_message("WARN", f"No se pudo cargar estado remoto desde GitHub ({e})")
 
         if data:
             self.active_slots = data.get("active_slots", [])
             self.trade_history = data.get("trade_history", [])
-            
-            # Recalcular Wins y Losses dinámicamente desde el historial real de trades
             self.total_wins = sum(1 for t in self.trade_history if t.get("result") == "WIN")
             self.total_losses = sum(1 for t in self.trade_history if t.get("result") == "LOSS")
-
-            # P&L Realizado Inmutable desde el historial
             self.realized_pnl_usd = sum(t.get("pnl_usd", 0.0) for t in self.trade_history)
 
-            # Acumuladores del modelo 70 / 20 / 10
             win_profits = sum(t.get("pnl_usd", 0.0) for t in self.trade_history if t.get("pnl_usd", 0.0) > 0)
             loss_totals = abs(sum(t.get("pnl_usd", 0.0) for t in self.trade_history if t.get("pnl_usd", 0.0) < 0))
 
             self.reinvested_70_usd = round(win_profits * 0.70, 2)
             self.profit_vault_usd = round(win_profits * 0.10, 2)
-            
             potential_buffer = win_profits * 0.20
+            
             if potential_buffer >= loss_totals:
                 self.drawdown_buffer_usd = round(potential_buffer - loss_totals, 2)
                 unabsorbed_loss = 0.0
@@ -119,28 +98,16 @@ class BinanceBotEngine:
 
             self.operating_capital_usd = round(INITIAL_CAPITAL_USD + self.reinvested_70_usd - unabsorbed_loss, 2)
             log_message("INFO", f"Estado cargado: {self.total_wins} Wins / {self.total_losses} Losses | PnL Realizado: ${self.realized_pnl_usd:.2f} USD")
-            return
-
-        self.active_slots = []
-        self.trade_history = []
-        self.realized_pnl_usd = 0.0
-        self.operating_capital_usd = INITIAL_CAPITAL_USD
-        self.reinvested_70_usd = 0.0
-        self.drawdown_buffer_usd = 0.0
-        self.profit_vault_usd = 0.0
 
     def save_state(self):
-        # 1. Garantizar recuento exacto de victorias y derrotas desde el historial
         self.total_wins = sum(1 for t in self.trade_history if t.get("result") == "WIN")
         self.total_losses = sum(1 for t in self.trade_history if t.get("result") == "LOSS")
 
         total_trades = self.total_wins + self.total_losses
         win_rate = (self.total_wins / total_trades * 100.0) if total_trades > 0 else 0.0
         
-        # 2. P&L Realizado Inmutable (Suma exacta de trades cerrados)
         realized_pnl = sum(t.get("pnl_usd", 0.0) for t in self.trade_history)
         
-        # 3. P&L Flotante (Suma exacta de posiciones abiertas con capital fluido)
         for slot in self.active_slots:
             if "allocated_capital_usd" not in slot:
                 slot["allocated_capital_usd"] = round(self.operating_capital_usd / MAX_SLOTS, 2)
@@ -148,11 +115,9 @@ class BinanceBotEngine:
         floating_pnl = sum(slot.get("pnl_usd", 0.0) for slot in self.active_slots)
         gross_assets = sum(slot.get("allocated_capital_usd", 100.0) + slot.get("pnl_usd", 0.0) for slot in self.active_slots)
         
-        # 4. P&L Neto Total y Patrimonio Inmutable (INITIAL_CAPITAL + net_pnl)
         total_net_pnl = realized_pnl + floating_pnl
         total_equity = INITIAL_CAPITAL_USD + total_net_pnl
 
-        # 5. Modelo 70 / 20 / 10 Recalculado
         win_profits = sum(t.get("pnl_usd", 0.0) for t in self.trade_history if t.get("pnl_usd", 0.0) > 0)
         loss_totals = abs(sum(t.get("pnl_usd", 0.0) for t in self.trade_history if t.get("pnl_usd", 0.0) < 0))
 
@@ -170,7 +135,7 @@ class BinanceBotEngine:
         operating_capital = round(INITIAL_CAPITAL_USD + reinvested_70 - unabsorbed_loss, 2)
 
         state = {
-            "botStatus": "PAPER_TRADING_OCO_ACTIVO",
+            "botStatus": "PAPER_TRADING_TOP50_100_ACTIVO",
             "executionMode": "PAPER_TRADING_REAL_MARKET_DATA",
             "lastRun": timestamp(),
             "btcGuard": self.btc_guard_status,
@@ -199,41 +164,63 @@ class BinanceBotEngine:
             json.dump(state, f, indent=2, ensure_ascii=False)
 
     def update_open_slots(self, current_analyses):
-        """Monitorea los slots activos con simulación de OCO Server-Side + Trailing Escalonado"""
+        """Monitorea los slots con Escalonamiento 50%+10%, Trailing y P&L Dinámico"""
         price_dict = {a["ticker"]: a["price"] for a in current_analyses if a["price"] > 0}
         
         remaining_slots = []
         for slot in self.active_slots:
             ticker = slot["ticker"]
-            entry_price = slot["entry_price"]
+            entry_price = slot.get("avg_entry_price", slot["entry_price"])
             current_price = price_dict.get(ticker, entry_price)
 
-            # P&L Bruto y P&L Neto descontando comisiones de Binance (Entrada + Salida = 0.15%)
             raw_pnl_pct = ((current_price - entry_price) / entry_price) * 100.0
             net_pnl_pct = raw_pnl_pct - (BINANCE_FEE_PCT * 2)
 
             slot_base = slot.get("allocated_capital_usd", round(self.operating_capital_usd / MAX_SLOTS, 2))
+            allocated_pct = slot.get("allocated_pct", 0.50)
+
+            # Escalonamiento del 10% adicional en Dips (-1.2%) o Momentum (+2.0%)
+            if net_pnl_pct <= -1.2 and allocated_pct < 1.0:
+                add_cost = slot_base * 0.10
+                add_qty = add_cost / current_price
+                slot["total_spent"] = slot.get("total_spent", slot_base * 0.50) + add_cost
+                slot["total_qty"] = slot.get("total_qty", (slot_base * 0.50) / entry_price) + add_qty
+                slot["avg_entry_price"] = slot["total_spent"] / slot["total_qty"]
+                slot["allocated_pct"] = allocated_pct + 0.10
+                log_message("SCALE_IN", f"➕ RECOMPRA DCA 10% [{ticker}]: Nuevo precio promedio: ${slot['avg_entry_price']:.4f} USD.")
+            elif net_pnl_pct >= 2.0 and allocated_pct < 1.0 and net_pnl_pct < 7.0:
+                add_cost = slot_base * 0.10
+                add_qty = add_cost / current_price
+                slot["total_spent"] = slot.get("total_spent", slot_base * 0.50) + add_cost
+                slot["total_qty"] = slot.get("total_qty", (slot_base * 0.50) / entry_price) + add_qty
+                slot["avg_entry_price"] = slot["total_spent"] / slot["total_qty"]
+                slot["allocated_pct"] = allocated_pct + 0.10
+                log_message("SCALE_IN", f"🚀 PIRAMIDACIÓN MOMENTUM 10% [{ticker}]: Carga incrementada. Precio promedio: ${slot['avg_entry_price']:.4f} USD.")
+
             slot["current_price"] = current_price
             slot["pnl_pct"] = round(net_pnl_pct, 2)
-            slot["pnl_usd"] = round(slot_base * (net_pnl_pct / 100.0), 2)
+            slot["pnl_usd"] = round(slot.get("total_spent", slot_base * 0.50) * (net_pnl_pct / 100.0), 2)
 
-            # 1. Trailing Stop - Escalón 1 (+3.0% -> Mover SL a Breakeven +0.2%)
-            if raw_pnl_pct >= TRAILING_STAGE_1 and slot.get("trailing_stage", 0) < 1:
+            trailing_stage = slot.get("trailing_stage", 0)
+
+            # Trailing Stop Escalonado
+            if net_pnl_pct >= TRAILING_STAGE_1 and trailing_stage < 1:
                 slot["trailing_stage"] = 1
-                slot["stop_loss_pct"] = -0.2 # Breakeven positivo (cubre comisión)
-                log_message("OCO_TRAIL", f"🔒 TRAILING 1 [{ticker}]: Ganancia al +{raw_pnl_pct:.2f}%. Stop OCO elevado a Breakeven (+0.2%).")
-
-            # 2. Trailing Stop - Escalón 2 (+4.5% -> Mover SL a +2.5% Lock)
-            elif raw_pnl_pct >= TRAILING_STAGE_2 and slot.get("trailing_stage", 0) < 2:
+                log_message("OCO_TRAIL", f"🔒 TRAILING 1 [{ticker}]: Ganancia al +{net_pnl_pct:.2f}%. Stop elevado a Breakeven (+0.3%).")
+            elif net_pnl_pct >= TRAILING_STAGE_2 and trailing_stage < 2:
                 slot["trailing_stage"] = 2
-                slot["stop_loss_pct"] = -2.5 # Asegura ganancia neta de +2.5%
-                log_message("OCO_TRAIL", f"🔥 TRAILING 2 [{ticker}]: Ganancia al +{raw_pnl_pct:.2f}%. Stop OCO elevado a +2.5% Ganancia Asegurada.")
+                log_message("OCO_TRAIL", f"🔥 TRAILING 2 [{ticker}]: Ganancia al +{net_pnl_pct:.2f}%. Stop elevado a Lock (+4.0%).")
 
-            # 3. Check OCO Take Profit (+6.0%)
-            if raw_pnl_pct >= TAKE_PROFIT_PCT:
+            current_stage = slot.get("trailing_stage", 0)
+
+            # Cierres
+            if net_pnl_pct >= TAKE_PROFIT_PCT:
                 self.close_slot(slot, "OCO_TAKE_PROFIT", net_pnl_pct)
-            # 4. Check OCO Stop Loss (Disparado en Servidor)
-            elif raw_pnl_pct <= slot.get("stop_loss_pct", -STOP_LOSS_PCT):
+            elif current_stage == 2 and net_pnl_pct <= 4.0:
+                self.close_slot(slot, "TRAILING_LOCK_4PCT", net_pnl_pct)
+            elif current_stage == 1 and net_pnl_pct <= 0.3:
+                self.close_slot(slot, "TRAILING_BREAKEVEN", net_pnl_pct)
+            elif current_stage == 0 and net_pnl_pct <= -STOP_LOSS_PCT:
                 self.close_slot(slot, "OCO_STOP_LOSS", net_pnl_pct)
             else:
                 remaining_slots.append(slot)
@@ -241,26 +228,20 @@ class BinanceBotEngine:
         self.active_slots = remaining_slots
 
     def close_slot(self, slot, reason, final_net_pnl_pct):
-        slot_base = slot.get("allocated_capital_usd", round(self.operating_capital_usd / MAX_SLOTS, 2))
-        pnl_usd = slot_base * (final_net_pnl_pct / 100.0)
-        self.net_pnl_usd += pnl_usd
+        total_spent = slot.get("total_spent", (slot.get("allocated_capital_usd", 100.0) * 0.50))
+        pnl_usd = total_spent * (final_net_pnl_pct / 100.0)
         self.net_pnl_usd += pnl_usd
 
-        # Aplicar Regla de Reinversión 70 / 20 / 10 sobre la utilidad generada
         if pnl_usd > 0:
             self.total_wins += 1
             tag = "WIN 🎯"
-            # 70% al Capital Operativo Compuesto
             self.reinvested_70_usd += pnl_usd * 0.70
             self.operating_capital_usd += pnl_usd * 0.70
-            # 20% al Cojín de Reserva de Drawdown
             self.drawdown_buffer_usd += pnl_usd * 0.20
-            # 10% a la Bóveda de Utilidad Intacta
             self.profit_vault_usd += pnl_usd * 0.10
         else:
             self.total_losses += 1
             tag = "LOSS 🛑"
-            # Las pérdidas se absorben primero del Cojín de Reserva (20%) si hay fondo, protegiendo el capital compuesto
             if self.drawdown_buffer_usd >= abs(pnl_usd):
                 self.drawdown_buffer_usd += pnl_usd
             else:
@@ -268,8 +249,9 @@ class BinanceBotEngine:
                 self.drawdown_buffer_usd = 0.0
                 self.operating_capital_usd -= remaining_loss
 
-        log_message("CLOSE_OCO", f"POSICIÓN CERRADA [{tag}]: [{slot['ticker']}] Motivo: {reason}. P&L Neto: {final_net_pnl_pct:+.2f}% (${pnl_usd:+.2f} USD).")
+        self.last_closed_timestamps[slot["ticker"]] = time.time()
 
+        log_message("CLOSE_OCO", f"POSICIÓN CERRADA [{tag}]: [{slot['ticker']}] Motivo: {reason}. P&L Neto: {final_net_pnl_pct:+.2f}% (${pnl_usd:+.2f} USD).")
         total_equity = self.operating_capital_usd + self.drawdown_buffer_usd + self.profit_vault_usd
         self.telegram.notify_close_slot(slot, reason, final_net_pnl_pct, pnl_usd, total_equity)
 
@@ -277,7 +259,7 @@ class BinanceBotEngine:
             "timestamp": timestamp(),
             "ticker": slot["ticker"],
             "name": slot["name"],
-            "entry_price": slot["entry_price"],
+            "entry_price": slot.get("avg_entry_price", slot["entry_price"]),
             "exit_price": slot["current_price"],
             "pnl_pct": round(final_net_pnl_pct, 2),
             "pnl_usd": round(pnl_usd, 2),
@@ -286,9 +268,9 @@ class BinanceBotEngine:
         })
 
     def open_new_slots(self, ranked_analyses):
-        """Ocupa los slots libres buscando patrones de Absorción de Volumen si BTC Guard está NORMAL"""
+        """Ocupa los slots libres buscando patrones de Absorción + Geometría en el Top 50-100"""
         if self.btc_guard_status["status"] == "PANIC_LOCK":
-            log_message("BTC_GUARD", "⚠️ BLOQUEO DE APERTURA: BTC Guard está en PANIC_LOCK. No se abrirán nuevos slots.")
+            log_message("BTC_GUARD", "⚠️ BLOQUEO DE APERTURA: BTC Guard en PANIC_LOCK.")
             self.telegram.notify_btc_guard(self.btc_guard_status["reason"])
             return
 
@@ -298,21 +280,33 @@ class BinanceBotEngine:
         if free_slots <= 0:
             return
 
+        now = time.time()
+
         for analysis in ranked_analyses:
             ticker = analysis["ticker"]
             score = analysis["score"]
 
-            # Requiere Score >= 68.0 (Señales de Absorción de Volumen)
+            # Cooldown de 60 minutos (3600 segundos) por moneda
+            last_closed = self.last_closed_timestamps.get(ticker, 0)
+            if (now - last_closed) < 3600:
+                continue
+
             if ticker not in open_tickers and score >= 68.0 and analysis["price"] > 0:
                 slot_capital = round(self.operating_capital_usd / MAX_SLOTS, 2)
+                initial_entry_cost = round(slot_capital * 0.50, 2)
+                
                 new_slot = {
                     "id": int(time.time() * 1000),
                     "ticker": ticker,
                     "name": analysis["name"],
                     "entry_time": timestamp(),
                     "entry_price": analysis["price"],
+                    "avg_entry_price": analysis["price"],
                     "current_price": analysis["price"],
                     "allocated_capital_usd": slot_capital,
+                    "total_spent": initial_entry_cost,
+                    "total_qty": initial_entry_cost / analysis["price"],
+                    "allocated_pct": 0.50,
                     "take_profit_pct": TAKE_PROFIT_PCT,
                     "stop_loss_pct": -STOP_LOSS_PCT,
                     "trailing_stage": 0,
@@ -326,15 +320,15 @@ class BinanceBotEngine:
                 open_tickers.add(ticker)
                 free_slots -= 1
 
-                log_message("OPEN_OCO", f"NUEVO SLOT OCO ABIERTO (Slot #{len(self.active_slots)}): [{ticker}] a ${analysis['price']} (Score Absorción: {score}). OCO: TP +6%, SL -2%.")
+                log_message("OPEN_OCO", f"NUEVO SLOT ESCALONADO 50% ABIERTO (Slot #{len(self.active_slots)}): [{ticker}] a ${analysis['price']} (Base Slot: ${slot_capital} USD). Entrada 50%: ${initial_entry_cost} USD. TP +9%, SL -4%.")
                 self.telegram.notify_open_slot(new_slot)
 
                 if free_slots <= 0:
                     break
 
     def run_cycle(self):
-        log_message("INFO", "--- ESCANEANDO TOP 20 Y EVALUANDO SLOTS DE PAPER TRADING ---")
-        ranked_analyses, btc_status = self.analyzer.rank_top_20(self.top_20_list)
+        log_message("INFO", "--- ESCANEANDO TOP 50-100 Y EVALUANDO SLOTS DE PAPER TRADING ---")
+        ranked_analyses, btc_status = self.analyzer.rank_top_20() # Top 50-100 dinámico
         self.btc_guard_status = btc_status
         
         self.update_open_slots(ranked_analyses)
@@ -344,7 +338,7 @@ class BinanceBotEngine:
         return ranked_analyses
 
 def main():
-    log_message("INFO", "=== BOT CRIPTO PAPER TRADING EN VIVO (OCO SERVER-SIDE + BTC GUARD + REINVERSION 70-20-10) ===")
+    log_message("INFO", "=== BOT CRIPTO DEFINTIVO TOP 50-100 (50%+10% ESCALONADO + GEOMETRIA + REINVERSION 70-20-10) ===")
     engine = BinanceBotEngine()
 
     try:

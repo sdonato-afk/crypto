@@ -1,5 +1,5 @@
-# crypto_analyzer.py - Motor de Análisis Cuantitativo y Absorción de Volumen
-# Implementa: BTC Guard (Freno Macro) + Absorción de Volumen + Dip Detection
+# crypto_analyzer.py - Motor de Análisis Cuantitativo, Geometría y Absorción de Volumen
+# Implementa: BTC Guard + Absorción de Volumen (2.5x) + Geometría (Squeeze / W-Bottom) + Filtro RSI < 75
 
 import json
 import urllib.request
@@ -11,13 +11,12 @@ class CryptoAnalyzer:
         self.binance_ticker_url = "https://api.binance.com/api/v3/ticker/24hr"
 
     def fetch_klines(self, symbol, interval="5m", limit=30):
-        """Consulta velas de temporalidad corta (5m) para detectar absorción de volumen"""
+        """Consulta velas de temporalidad corta para análisis técnico"""
         url = f"{self.binance_klines_url}?symbol={symbol}&interval={interval}&limit={limit}"
         try:
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
             with urllib.request.urlopen(req, timeout=4) as resp:
                 data = json.loads(resp.read().decode())
-                # Formato KLine: [open_time, open, high, low, close, volume, ...]
                 candles = []
                 for k in data:
                     candles.append({
@@ -31,19 +30,33 @@ class CryptoAnalyzer:
         except Exception:
             return []
 
+    def get_top_50_100_symbols(self):
+        """Obtiene las 50 criptomonedas ubicadas entre el ranking 50 y 100 por volumen en Binance"""
+        try:
+            req = urllib.request.Request(self.binance_ticker_url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                data = json.loads(resp.read().decode())
+                usdt_pairs = [d for d in data if d['symbol'].endswith('USDT') and not d['symbol'].startswith('UP') and not d['symbol'].startswith('DOWN') and not 'BEAR' in d['symbol'] and not 'BULL' in d['symbol'] and not 'FDUSD' in d['symbol'] and not 'USDC' in d['symbol'] and not 'TUSD' in d['symbol'] and not 'EUR' in d['symbol']]
+                usdt_pairs.sort(key=lambda x: float(x['quoteVolume']), reverse=True)
+                top_50_100 = usdt_pairs[50:100]
+                
+                results = []
+                for p in top_50_100:
+                    symbol = p['symbol']
+                    ticker = symbol.replace('USDT', '')
+                    results.append({"ticker": ticker, "name": ticker, "symbol": symbol})
+                return results
+        except Exception:
+            return []
+
     def check_btc_guard(self):
-        """
-        BTC Guard: Monitorea Bitcoin en tiempo real.
-        Si BTC sufre un flash crash (> -1.2% en velas de 5m reciente), 
-        activa el Freno de Mano de Mercado para evitar abrir altcoins en caída libre.
-        """
+        """BTC Guard: Monitorea flash crash de Bitcoin (> -1.2% en 15m)"""
         candles = self.fetch_klines("BTCUSDT", interval="5m", limit=6)
         if len(candles) < 3:
             return {"status": "OK", "reason": "Sin datos suficientes BTC", "drop_pct": 0.0}
 
         latest_close = candles[-1]["close"]
-        prev_close = candles[-3]["open"] # Cambio en los últimos ~15 minutos
-
+        prev_close = candles[-3]["open"]
         drop_pct = ((latest_close - prev_close) / prev_close) * 100.0
 
         if drop_pct <= -1.2:
@@ -59,13 +72,22 @@ class CryptoAnalyzer:
             "drop_pct": round(drop_pct, 2)
         }
 
+    def calculate_rsi(self, candles, period=14):
+        if len(candles) < period + 1:
+            return 50.0
+        gains, losses = [], []
+        for i in range(1, len(candles)):
+            diff = candles[i]["close"] - candles[i-1]["close"]
+            gains.append(diff if diff >= 0 else 0.0)
+            losses.append(abs(diff) if diff < 0 else 0.0)
+        avg_gain = sum(gains[-period:]) / period
+        avg_loss = sum(losses[-period:]) / period
+        if avg_loss == 0: return 100.0
+        return 100.0 - (100.0 / (1.0 + (avg_gain / avg_loss)))
+
     def analyze_volume_absorption(self, crypto_item):
         """
-        Estrategia Diferenciada: Dip & Volume Absorption
-        Busca activos del Top 20 que:
-        1. Hayan tenido una caída previa (Dip)
-        2. Muestren una vela de absorción con mecha inferior (Whale absorption)
-        3. Tengan un volumen comprador 2.0x o superior al promedio
+        Estrategia Combinada: Volume Surge + Geometría Squeeze/W-Bottom + Filtro RSI < 75
         """
         symbol = crypto_item["symbol"]
         candles = self.fetch_klines(symbol, interval="5m", limit=24) # Últimas 2 horas
@@ -79,17 +101,15 @@ class CryptoAnalyzer:
                 "score": 0.0,
                 "signal": "SIN_DATOS",
                 "volume_ratio": 1.0,
-                "wick_ratio": 0.0
+                "wick_ratio": 0.0,
+                "rsi": 50.0
             }
 
         current_price = candles[-1]["close"]
         high_2h = max(c["high"] for c in candles)
         low_2h = min(c["low"] for c in candles)
-
-        # 1. Porcentaje de caída desde el máximo de 2 horas (Dip Check)
         dip_pct = ((current_price - high_2h) / high_2h) * 100.0
 
-        # 2. Análisis de la última vela (Mecha inferior vs Cuerpo)
         last_candle = candles[-1]
         c_open = last_candle["open"]
         c_close = last_candle["close"]
@@ -97,37 +117,49 @@ class CryptoAnalyzer:
         c_low = last_candle["low"]
         
         total_range = c_high - c_low
-        body_size = abs(c_close - c_open)
         lower_wick = min(c_open, c_close) - c_low
-
         wick_ratio = (lower_wick / total_range) if total_range > 0 else 0.0
 
-        # 3. Ratio de Volumen vs Promedio de 20 períodos
         avg_volume = sum(c["volume"] for c in candles[:-1]) / (len(candles) - 1)
         volume_ratio = (last_candle["volume"] / avg_volume) if avg_volume > 0 else 1.0
+        
+        rsi_val = self.calculate_rsi(candles, period=14)
 
-        # 4. Cálculo del Score Cuantitativo Diferenciado (0 a 100)
+        # Geometría 1: Compresión de Volatilidad (Squeeze)
+        recent_ranges = [((c["high"] - c["low"]) / c["open"]) * 100.0 for c in candles[-6:-1]]
+        avg_squeeze_range = (sum(recent_ranges) / len(recent_ranges)) if recent_ranges else 3.0
+        is_squeeze = avg_squeeze_range < 1.8
+
+        # Geometría 2: Doble Suelo Local (W-Bottom)
+        recent_lows = [c["low"] for c in candles[-12:]]
+        l1 = min(recent_lows[:6])
+        l2 = min(recent_lows[6:])
+        is_w_bottom = (abs(l1 - l2) / l1 <= 0.008)
+
         score = 40.0
 
-        # Bajar puntaje si está sobrecomprado o en máximo absoluto
-        if current_price >= high_2h * 0.99:
-            score -= 15.0 # Evita comprar en el pico del gráfico
+        # Filtro Anti-FOMO RSI
+        if rsi_val > 75.0:
+            score -= 30.0 # Descartar sobrecompra extrema en la cima
 
-        # Bonificación por Caída Controlada (Dip ideal entre -1.5% y -4.5%)
-        if -4.5 <= dip_pct <= -1.5:
+        # Bonificación por Pico de Volumen Institucional (>= 2.5x)
+        if volume_ratio >= 2.5 and c_close >= c_open:
             score += 25.0
-        elif dip_pct < -6.0:
-            score -= 20.0 # Caída demasiado violenta (Cuchillo cayendo)
+        elif volume_ratio >= 2.0:
+            score += 15.0
 
-        # Bonificación por Absorción de Mecha (Whale Wick > 40% del rango)
+        # Bonificación por Absorción de Mecha (Wick > 40%)
         if wick_ratio >= 0.40:
             score += 20.0
 
-        # Bonificación por Pico de Volumen Comprador
-        if volume_ratio >= 2.0 and c_close >= c_open:
+        # Bonificación por Geometría Squeeze o W-Bottom
+        if is_squeeze:
             score += 20.0
-        elif volume_ratio >= 1.5:
-            score += 10.0
+        if is_w_bottom:
+            score += 15.0
+
+        if -4.5 <= dip_pct <= -1.5:
+            score += 15.0
 
         score = max(0.0, min(100.0, round(score, 1)))
 
@@ -145,14 +177,18 @@ class CryptoAnalyzer:
             "dip_pct": round(dip_pct, 2),
             "wick_ratio": round(wick_ratio * 100, 1),
             "volume_ratio": round(volume_ratio, 2),
+            "rsi": round(rsi_val, 1),
             "score": score,
             "signal": signal
         }
 
-    def rank_top_20(self, crypto_list):
-        """Analiza y ordena los activos de mayor a menor potencial por Absorción de Volumen"""
+    def rank_top_20(self, crypto_list=None):
+        """Analiza y ordena los activos del Top 50-100 por Absorción de Volumen y Geometría"""
         results = []
         btc_status = self.check_btc_guard()
+
+        if not crypto_list:
+            crypto_list = self.get_top_50_100_symbols()
 
         for item in crypto_list:
             analysis = self.analyze_volume_absorption(item)
