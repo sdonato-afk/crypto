@@ -62,9 +62,9 @@ class TelegramNotifier:
             f"🪙 <b>Activo:</b> #{slot['ticker']} ({slot['name']})\n"
             f"💵 <b>Precio Entrada:</b> ${slot['entry_price']}\n"
             f"📊 <b>Score Absorción:</b> {slot['score']} / 100\n"
-            f"🎯 <b>Take Profit (OCO):</b> +6.0%\n"
-            f"🛑 <b>Stop Loss (OCO):</b> -2.0%\n"
-            f"💰 <b>Capital Asignado:</b> $100.00 USDT\n\n"
+            f"🎯 <b>Take Profit (OCO):</b> +{slot.get('take_profit_pct', 9.0)}%\n"
+            f"🛑 <b>Stop Loss (OCO):</b> {slot.get('stop_loss_pct', -4.0)}%\n"
+            f"💰 <b>Capital Asignado:</b> ${slot.get('allocated_capital_usd', 100.0):.2f} USDT\n\n"
             f"<i>Escaneado desde Binance API en vivo.</i>"
         )
         self.send_message(msg)
@@ -78,7 +78,7 @@ class TelegramNotifier:
             f"📊 <b>Resultado Neto:</b> {net_pnl_pct:+.2f}% (${pnl_usd:+.2f} USD)\n"
             f"📝 <b>Motivo Cierre:</b> {reason}\n"
             f"💼 <b>Patrimonio Actual:</b> ${total_equity:.2f} USDT\n\n"
-            f"<i>Descontada comisión oficial Binance (0.075% BNB discount).</i>"
+            f"<i>Descontada comisión Binance (0.024% con descuento BNB + Maker + Kickback).</i>"
         )
         self.send_message(msg)
 

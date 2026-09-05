@@ -11,52 +11,78 @@ class CryptoAnalyzer:
         self.binance_ticker_url = "https://api.binance.com/api/v3/ticker/24hr"
 
     def fetch_klines(self, symbol, interval="5m", limit=30):
-        """Consulta velas de temporalidad corta para análisis técnico"""
+        """Consulta velas de temporalidad corta para análisis técnico (con reintentos)"""
         url = f"{self.binance_klines_url}?symbol={symbol}&interval={interval}&limit={limit}"
-        try:
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req, timeout=4) as resp:
-                data = json.loads(resp.read().decode())
-                candles = []
-                for k in data:
-                    candles.append({
-                        "open": float(k[1]),
-                        "high": float(k[2]),
-                        "low": float(k[3]),
-                        "close": float(k[4]),
-                        "volume": float(k[5])
-                    })
-                return candles
-        except Exception:
-            return []
+        for attempt in range(3):
+            try:
+                req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+                with urllib.request.urlopen(req, timeout=8) as resp:
+                    data = json.loads(resp.read().decode())
+                    candles = []
+                    for k in data:
+                        candles.append({
+                            "open": float(k[1]),
+                            "high": float(k[2]),
+                            "low": float(k[3]),
+                            "close": float(k[4]),
+                            "volume": float(k[5])
+                        })
+                    return candles
+            except Exception as e:
+                if attempt < 2:
+                    time.sleep(1.5 * (attempt + 1))
+                else:
+                    print(f"[WARN] fetch_klines({symbol}) falló tras 3 intentos: {e}")
+                    return []
+
+    def fetch_ticker_price(self, symbol):
+        """Consulta precio actual de un ticker específico (para slots que salieron del Top 50-100)"""
+        url = f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}"
+        for attempt in range(3):
+            try:
+                req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+                with urllib.request.urlopen(req, timeout=8) as resp:
+                    data = json.loads(resp.read().decode())
+                    return float(data["price"])
+            except Exception:
+                if attempt < 2:
+                    time.sleep(1.0 * (attempt + 1))
+        return 0.0
 
     def get_top_50_100_symbols(self):
-        """Obtiene las 50 criptomonedas ubicadas entre el ranking 50 y 100 por volumen en Binance"""
-        try:
-            req = urllib.request.Request(self.binance_ticker_url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req, timeout=5) as resp:
-                data = json.loads(resp.read().decode())
-                usdt_pairs = [d for d in data if d['symbol'].endswith('USDT') and not d['symbol'].startswith('UP') and not d['symbol'].startswith('DOWN') and not 'BEAR' in d['symbol'] and not 'BULL' in d['symbol'] and not 'FDUSD' in d['symbol'] and not 'USDC' in d['symbol'] and not 'TUSD' in d['symbol'] and not 'EUR' in d['symbol']]
-                usdt_pairs.sort(key=lambda x: float(x['quoteVolume']), reverse=True)
-                top_50_100 = usdt_pairs[50:100]
-                
-                results = []
-                for p in top_50_100:
-                    symbol = p['symbol']
-                    ticker = symbol.replace('USDT', '')
-                    results.append({"ticker": ticker, "name": ticker, "symbol": symbol})
-                return results
-        except Exception:
-            return []
+        """Obtiene las 50 criptomonedas ubicadas entre el ranking 50 y 100 por volumen en Binance (con reintentos)"""
+        for attempt in range(3):
+            try:
+                req = urllib.request.Request(self.binance_ticker_url, headers={'User-Agent': 'Mozilla/5.0'})
+                with urllib.request.urlopen(req, timeout=8) as resp:
+                    data = json.loads(resp.read().decode())
+                    usdt_pairs = [d for d in data if d['symbol'].endswith('USDT') and not d['symbol'].startswith('UP') and not d['symbol'].startswith('DOWN') and not 'BEAR' in d['symbol'] and not 'BULL' in d['symbol'] and not 'FDUSD' in d['symbol'] and not 'USDC' in d['symbol'] and not 'TUSD' in d['symbol'] and not 'EUR' in d['symbol']]
+                    usdt_pairs.sort(key=lambda x: float(x['quoteVolume']), reverse=True)
+                    # Filtrar tokens con precio < $0.001 que distorsionan cantidades
+                    usdt_pairs = [p for p in usdt_pairs if float(p['lastPrice']) >= 0.001]
+                    top_50_100 = usdt_pairs[50:100]
+                    
+                    results = []
+                    for p in top_50_100:
+                        symbol = p['symbol']
+                        ticker = symbol.replace('USDT', '')
+                        results.append({"ticker": ticker, "name": ticker, "symbol": symbol})
+                    return results
+            except Exception as e:
+                if attempt < 2:
+                    time.sleep(1.5 * (attempt + 1))
+                else:
+                    print(f"[WARN] get_top_50_100_symbols() falló tras 3 intentos: {e}")
+                    return []
 
     def check_btc_guard(self):
         """BTC Guard: Monitorea flash crash de Bitcoin (> -1.2% en 15m)"""
         candles = self.fetch_klines("BTCUSDT", interval="5m", limit=6)
-        if len(candles) < 3:
+        if len(candles) < 5:
             return {"status": "OK", "reason": "Sin datos suficientes BTC", "drop_pct": 0.0}
 
         latest_close = candles[-1]["close"]
-        prev_close = candles[-3]["open"]
+        prev_close = candles[-4]["close"]  # Cierre de hace ~20 min (4 velas × 5m), más estable
         drop_pct = ((latest_close - prev_close) / prev_close) * 100.0
 
         if drop_pct <= -1.2:

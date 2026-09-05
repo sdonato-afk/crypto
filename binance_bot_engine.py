@@ -172,7 +172,12 @@ class BinanceBotEngine:
         for slot in self.active_slots:
             ticker = slot["ticker"]
             entry_price = slot.get("avg_entry_price", slot["entry_price"])
-            current_price = price_dict.get(ticker, entry_price)
+            current_price = price_dict.get(ticker, 0.0)
+            if current_price <= 0:
+                # Ticker salió del Top 50-100, consultar precio directo a Binance
+                current_price = self.analyzer.fetch_ticker_price(slot.get("symbol", ticker + "USDT"))
+                if current_price <= 0:
+                    current_price = entry_price  # Último recurso si API falla
 
             raw_pnl_pct = ((current_price - entry_price) / entry_price) * 100.0
             net_pnl_pct = raw_pnl_pct - (BINANCE_FEE_PCT * 2)
@@ -181,21 +186,26 @@ class BinanceBotEngine:
             allocated_pct = slot.get("allocated_pct", 0.50)
 
             # Escalonamiento del 10% adicional en Dips (-1.2%) o Momentum (+2.0%)
-            if net_pnl_pct <= -1.2 and allocated_pct < 1.0:
+            last_scale = slot.get("last_scale_timestamp", 0)
+            scale_cooldown_ok = (time.time() - last_scale) >= 300  # 5 min entre recompras
+
+            if net_pnl_pct <= -1.2 and allocated_pct < 1.0 and scale_cooldown_ok:
                 add_cost = slot_base * 0.10
                 add_qty = add_cost / current_price
                 slot["total_spent"] = slot.get("total_spent", slot_base * 0.50) + add_cost
                 slot["total_qty"] = slot.get("total_qty", (slot_base * 0.50) / entry_price) + add_qty
                 slot["avg_entry_price"] = slot["total_spent"] / slot["total_qty"]
                 slot["allocated_pct"] = allocated_pct + 0.10
+                slot["last_scale_timestamp"] = time.time()
                 log_message("SCALE_IN", f"➕ RECOMPRA DCA 10% [{ticker}]: Nuevo precio promedio: ${slot['avg_entry_price']:.4f} USD.")
-            elif net_pnl_pct >= 2.0 and allocated_pct < 1.0 and net_pnl_pct < 7.0:
+            elif net_pnl_pct >= 2.0 and allocated_pct < 1.0 and net_pnl_pct < 7.0 and scale_cooldown_ok:
                 add_cost = slot_base * 0.10
                 add_qty = add_cost / current_price
                 slot["total_spent"] = slot.get("total_spent", slot_base * 0.50) + add_cost
                 slot["total_qty"] = slot.get("total_qty", (slot_base * 0.50) / entry_price) + add_qty
                 slot["avg_entry_price"] = slot["total_spent"] / slot["total_qty"]
                 slot["allocated_pct"] = allocated_pct + 0.10
+                slot["last_scale_timestamp"] = time.time()
                 log_message("SCALE_IN", f"🚀 PIRAMIDACIÓN MOMENTUM 10% [{ticker}]: Carga incrementada. Precio promedio: ${slot['avg_entry_price']:.4f} USD.")
 
             slot["current_price"] = current_price
@@ -217,7 +227,7 @@ class BinanceBotEngine:
             # Cierres
             if net_pnl_pct >= TAKE_PROFIT_PCT:
                 self.close_slot(slot, "OCO_TAKE_PROFIT", net_pnl_pct)
-            elif current_stage == 2 and net_pnl_pct <= 4.0:
+            elif current_stage == 2 and net_pnl_pct <= 3.9:
                 self.close_slot(slot, "TRAILING_LOCK_4PCT", net_pnl_pct)
             elif current_stage == 1 and net_pnl_pct <= 0.3:
                 self.close_slot(slot, "TRAILING_BREAKEVEN", net_pnl_pct)
@@ -291,7 +301,7 @@ class BinanceBotEngine:
         spent_accum = 0.0
 
         for i, chunk_usd in enumerate(chunks):
-            micro_price = base_price * (1.0 + random.uniform(-0.0001, 0.0002))
+            micro_price = base_price * (1.0 + random.uniform(-0.0003, 0.0015))
             micro_qty = chunk_usd / micro_price
             total_qty += micro_qty
             spent_accum += chunk_usd
@@ -339,6 +349,7 @@ class BinanceBotEngine:
                     "id": int(time.time() * 1000),
                     "ticker": ticker,
                     "name": analysis["name"],
+                    "symbol": analysis["symbol"],
                     "entry_time": timestamp(),
                     "entry_price": analysis["price"],
                     "avg_entry_price": avg_entry_price,
