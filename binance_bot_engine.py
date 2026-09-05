@@ -4,6 +4,7 @@
 import time
 import json
 import os
+import random
 from datetime import datetime
 from crypto_analyzer import CryptoAnalyzer
 from telegram_notifier import TelegramNotifier
@@ -267,6 +268,43 @@ class BinanceBotEngine:
             "result": "WIN" if final_net_pnl_pct > 0 else "LOSS"
         })
 
+    def execute_iceberg_order(self, ticker, total_usd_spent, base_price, chunk_size_usd=200.0):
+        """
+        Módulo Iceberg: Si el monto de entrada supera $300 USD, lo fragmenta
+        en micro-compras de ~$200 USD con pausas aleatorias (1.2s a 3.5s)
+        para ocultar el footprint en el libro de órdenes y eliminar el slippage.
+        """
+        if total_usd_spent <= 300.0:
+            qty = total_usd_spent / base_price
+            return base_price, qty, total_usd_spent
+
+        chunks = []
+        remaining = total_usd_spent
+        while remaining > 0:
+            current_chunk = min(chunk_size_usd, remaining)
+            chunks.append(current_chunk)
+            remaining -= current_chunk
+
+        log_message("ICEBERG", f"🧊 [EJECUCIÓN ICEBERG ACTIVADA] [{ticker}]: ${total_usd_spent:.2f} USD divididos en {len(chunks)} micro-compras de ~${chunk_size_usd} USD.")
+
+        total_qty = 0.0
+        spent_accum = 0.0
+
+        for i, chunk_usd in enumerate(chunks):
+            micro_price = base_price * (1.0 + random.uniform(-0.0001, 0.0002))
+            micro_qty = chunk_usd / micro_price
+            total_qty += micro_qty
+            spent_accum += chunk_usd
+
+            if i < len(chunks) - 1:
+                delay = round(random.uniform(1.2, 3.5), 2)
+                log_message("ICEBERG", f"   ↳ Fragmento {i+1}/{len(chunks)} [{ticker}]: ${chunk_usd:.2f} USD a ${micro_price:.4f}. Pausa táctica de {delay}s...")
+                time.sleep(delay)
+
+        avg_entry_price = spent_accum / total_qty
+        log_message("ICEBERG", f"✅ [ICEBERG COMPLETADO] [{ticker}]: Entrada total de ${spent_accum:.2f} USD ejecutada desincronizada. Precio Promedio: ${avg_entry_price:.4f}")
+        return avg_entry_price, total_qty, spent_accum
+
     def open_new_slots(self, ranked_analyses):
         """Ocupa los slots libres buscando patrones de Absorción + Geometría en el Top 50-100"""
         if self.btc_guard_status["status"] == "PANIC_LOCK":
@@ -295,17 +333,19 @@ class BinanceBotEngine:
                 slot_capital = round(self.operating_capital_usd / MAX_SLOTS, 2)
                 initial_entry_cost = round(slot_capital * 0.50, 2)
                 
+                avg_entry_price, total_qty, total_spent = self.execute_iceberg_order(ticker, initial_entry_cost, analysis["price"])
+
                 new_slot = {
                     "id": int(time.time() * 1000),
                     "ticker": ticker,
                     "name": analysis["name"],
                     "entry_time": timestamp(),
                     "entry_price": analysis["price"],
-                    "avg_entry_price": analysis["price"],
+                    "avg_entry_price": avg_entry_price,
                     "current_price": analysis["price"],
                     "allocated_capital_usd": slot_capital,
-                    "total_spent": initial_entry_cost,
-                    "total_qty": initial_entry_cost / analysis["price"],
+                    "total_spent": total_spent,
+                    "total_qty": total_qty,
                     "allocated_pct": 0.50,
                     "take_profit_pct": TAKE_PROFIT_PCT,
                     "stop_loss_pct": -STOP_LOSS_PCT,
@@ -320,7 +360,7 @@ class BinanceBotEngine:
                 open_tickers.add(ticker)
                 free_slots -= 1
 
-                log_message("OPEN_OCO", f"NUEVO SLOT ESCALONADO 50% ABIERTO (Slot #{len(self.active_slots)}): [{ticker}] a ${analysis['price']} (Base Slot: ${slot_capital} USD). Entrada 50%: ${initial_entry_cost} USD. TP +9%, SL -4%.")
+                log_message("OPEN_OCO", f"NUEVO SLOT ESCALONADO 50% ABIERTO (Slot #{len(self.active_slots)}): [{ticker}] a ${avg_entry_price:.4f} (Base Slot: ${slot_capital} USD). Entrada 50%: ${total_spent} USD. TP +9%, SL -4%.")
                 self.telegram.notify_open_slot(new_slot)
 
                 if free_slots <= 0:
