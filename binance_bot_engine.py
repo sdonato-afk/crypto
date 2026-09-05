@@ -131,6 +131,13 @@ class BinanceBotEngine:
             log_message("SCALE_IN", f"🚀 PIRAMIDACIÓN MOMENTUM 10% [{ticker}]: Carga incrementada. Precio promedio: ${slot['avg_entry_price']:.4f} USD.")
 
     def load_state(self):
+        # Si FRESH_START=1, borrar estado viejo y arrancar limpio
+        if os.environ.get("FRESH_START", "0") == "1":
+            if os.path.exists(STATE_FILE):
+                os.remove(STATE_FILE)
+            log_message("INFO", "FRESH_START activado: estado anterior borrado. Arrancando desde cero.")
+            return
+
         data = None
         if os.path.exists(STATE_FILE):
             try:
