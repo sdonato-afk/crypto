@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MAESTRO | Fleet Command</title>
+    <style>
+        :root {
+            --bg-dark: #03050c;
+            --bg-card: rgba(11, 16, 32, 0.85);
+            --bg-card-hover: rgba(18, 26, 50, 0.95);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --border-highlight: rgba(6, 182, 212, 0.4);
+            
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --text-dim: #64748b;
+            
+            --accent-cyan: #06b6d4;
+            --accent-cyan-glow: rgba(6, 182, 212, 0.35);
+            --accent-green: #10b981;
+            --accent-purple: #8b5cf6;
+            --accent-amber: #f59e0b;
+            --accent-rose: #f43f5e;
+            
+            --radius-lg: 16px;
+            --radius-md: 12px;
+            --radius-sm: 8px;
+            
+            --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(6, 182, 212, 0.12) 0px, transparent 45%),
+                radial-gradient(at 100% 0%, rgba(139, 92, 246, 0.12) 0px, transparent 45%),
+                radial-gradient(at 50% 100%, rgba(16, 185, 129, 0.08) 0px, transparent 50%);
+            background-attachment: fixed;
+            color: var(--text-main);
+            font-family: var(--font-sans);
+            margin: 0;
+            padding: 24px;
+            font-size: 13px;
+        }
+
+        .header {
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 15px;
+            margin-bottom: 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .title {
+            font-size: 24px;
+            font-weight: 800;
+            background: linear-gradient(90deg, #ffffff, #38bdf8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-transform: uppercase;
+            letter-spacing: -0.5px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        input {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid var(--border-color);
+            color: var(--accent-cyan);
+            padding: 8px 12px;
+            font-family: var(--font-mono);
+            font-size: 12px;
+            border-radius: var(--radius-sm);
+        }
+
+        input:focus {
+            outline: none;
+            border-color: var(--accent-cyan);
+        }
+
+        button {
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+            border: none;
+            color: #fff;
+            padding: 8px 20px;
+            font-family: var(--font-sans);
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            border-radius: var(--radius-sm);
+            text-transform: uppercase;
+            transition: all 0.2s;
+            box-shadow: 0 0 15px var(--accent-cyan-glow);
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 0 20px var(--accent-cyan-glow);
+        }
+
+        .global-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            margin-bottom: 30px;
+        }
+
+        .stat-box {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            padding: 20px;
+            border-radius: var(--radius-lg);
+            backdrop-filter: blur(16px);
+            text-align: center;
+        }
+
+        .stat-label {
+            color: var(--text-muted);
+            font-size: 13px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-size: 32px;
+            font-weight: 800;
+            font-family: var(--font-mono);
+            color: var(--accent-cyan);
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+        }
+
+        .node-panel {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+            backdrop-filter: blur(16px);
+        }
+
+        .node-header {
+            background: rgba(0,0,0,0.2);
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .node-title {
+            font-weight: 800;
+            color: #fff;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-family: var(--font-sans);
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--text-dim);
+        }
+
+        .status-dot.active {
+            background: var(--accent-green);
+            box-shadow: 0 0 10px var(--accent-green);
+        }
+        
+        .status-dot.error {
+            background: var(--accent-rose);
+            box-shadow: 0 0 12px var(--accent-rose);
+            animation: pulse-red 1s infinite alternate;
+        }
+
+        @keyframes pulse-red {
+            from { opacity: 0.5; }
+            to { opacity: 1; }
+        }
+
+        .node-content {
+            padding: 24px;
+        }
+
+        .node-summary {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 24px;
+        }
+
+        .node-metric {
+            background: rgba(0,0,0,0.2);
+            padding: 12px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+        }
+
+        .node-metric-label {
+            color: var(--text-muted);
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+        }
+
+        .node-metric-value {
+            font-size: 20px;
+            font-weight: 800;
+            font-family: var(--font-mono);
+            color: #fff;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            text-align: left;
+            padding: 12px 10px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-muted);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        td {
+            padding: 12px 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            font-family: var(--font-mono);
+            font-size: 13px;
+        }
+
+        .val-green { color: var(--accent-green); font-weight: 700; }
+        .val-red { color: var(--accent-rose); font-weight: 700; }
+
+        .badge-trail {
+            background: rgba(139, 92, 246, 0.2);
+            color: #c084fc;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        #auth-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(3,5,12,0.95);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            backdrop-filter: blur(10px);
+        }
+
+        .auth-box {
+            background: var(--bg-card);
+            border: 1px solid var(--accent-cyan);
+            padding: 40px;
+            border-radius: var(--radius-lg);
+            width: 320px;
+            box-shadow: 0 0 30px var(--accent-cyan-glow);
+            text-align: center;
+        }
+
+        .auth-box input {
+            width: 100%;
+            box-sizing: border-box;
+            margin-bottom: 16px;
+            padding: 12px;
+        }
+
+        .auth-box button {
+            width: 100%;
+            padding: 14px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="auth-overlay">
+        <div class="auth-box">
+            <h2 style="margin-top:0; color:var(--neon-blue); text-align:center;">SECURE FLEET LINK</h2>
+            <input type="text" id="auth-user" placeholder="Username" value="admin">
+            <input type="password" id="auth-pass" placeholder="Password" value="cripto2026">
+            <button onclick="initializeFleet()">AUTHORIZE ACCESS</button>
+        </div>
+    </div>
+
+    <div class="header">
+        <div class="title">MAESTRO <span>//</span> FLEET COMMAND</div>
+        <div class="controls">
+            <span>NODE A URL:</span>
+            <input type="text" id="node-a-url" value="http://localhost:5000">
+            <span style="margin-left:15px;">NODE B URL:</span>
+            <input type="text" id="node-b-url" value="http://localhost:5001">
+            <button onclick="forceRefresh()" style="margin-left:15px;">REFRESH</button>
+        </div>
+    </div>
+
+    <div class="global-stats">
+        <div class="stat-box">
+            <div class="stat-label">TOTAL FLEET EQUITY (USDT)</div>
+            <div class="stat-value" id="global-equity">--</div>
+        </div>
+        <div class="stat-box">
+            <div class="stat-label">COMBINED FREE USDT</div>
+            <div class="stat-value" id="global-free" style="color:#fff;">--</div>
+        </div>
+        <div class="stat-box">
+            <div class="stat-label">GLOBAL ACTIVE SLOTS</div>
+            <div class="stat-value" id="global-slots" style="color:var(--neon-blue);">-- / 20</div>
+        </div>
+    </div>
+
+    <div class="grid">
+        <!-- NODE A -->
+        <div class="node-panel">
+            <div class="node-header">
+                <div class="node-title">
+                    <div class="status-dot" id="node-a-dot"></div>
+                    NODE A [ TOP 1-50 ]
+                </div>
+                <div style="font-size: 10px; color: var(--text-muted);" id="node-a-last">Awaiting link...</div>
+            </div>
+            <div class="node-content">
+                <div class="node-summary">
+                    <div class="node-metric">
+                        <div class="node-metric-label">TOTAL EQUITY</div>
+                        <div class="node-metric-value" id="node-a-equity">--</div>
+                    </div>
+                    <div class="node-metric">
+                        <div class="node-metric-label">STATUS</div>
+                        <div class="node-metric-value" id="node-a-status" style="color:var(--neon-green);">--</div>
+                    </div>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ASSET</th>
+                            <th>ENTRY</th>
+                            <th>CURRENT</th>
+                            <th>PNL %</th>
+                            <th>TRAIL</th>
+                        </tr>
+                    </thead>
+                    <tbody id="node-a-positions">
+                        <tr><td colspan="5" style="text-align:center; color:var(--text-muted);">No active data</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- NODE B -->
+        <div class="node-panel">
+            <div class="node-header">
+                <div class="node-title">
+                    <div class="status-dot" id="node-b-dot"></div>
+                    NODE B [ TOP 51-100 ]
+                </div>
+                <div style="font-size: 10px; color: var(--text-muted);" id="node-b-last">Awaiting link...</div>
+            </div>
+            <div class="node-content">
+                <div class="node-summary">
+                    <div class="node-metric">
+                        <div class="node-metric-label">TOTAL EQUITY</div>
+                        <div class="node-metric-value" id="node-b-equity">--</div>
+                    </div>
+                    <div class="node-metric">
+                        <div class="node-metric-label">STATUS</div>
+                        <div class="node-metric-value" id="node-b-status" style="color:var(--neon-green);">--</div>
+                    </div>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ASSET</th>
+                            <th>ENTRY</th>
+                            <th>CURRENT</th>
+                            <th>PNL %</th>
+                            <th>TRAIL</th>
+                        </tr>
+                    </thead>
+                    <tbody id="node-b-positions">
+                        <tr><td colspan="5" style="text-align:center; color:var(--text-muted);">No active data</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let authHeader = "";
+        let refreshTimer = null;
+        
+        let globalData = {
+            a: { equity: 0, free: 0, slots: 0, connected: false },
+            b: { equity: 0, free: 0, slots: 0, connected: false }
+        };
+
+        function initializeFleet() {
+            const user = document.getElementById("auth-user").value;
+            const pass = document.getElementById("auth-pass").value;
+            authHeader = "Basic " + btoa(user + ":" + pass);
+            
+            document.getElementById("auth-overlay").style.display = "none";
+            forceRefresh();
+            refreshTimer = setInterval(forceRefresh, 5000);
+        }
+
+        async function forceRefresh() {
+            const urlA = document.getElementById("node-a-url").value;
+            const urlB = document.getElementById("node-b-url").value;
+
+            fetchNode(urlA, 'a');
+            fetchNode(urlB, 'b');
+        }
+
+        async function fetchNode(baseUrl, nodeId) {
+            const dot = document.getElementById(`node-${nodeId}-dot`);
+            const timeLabel = document.getElementById(`node-${nodeId}-last`);
+            
+            try {
+                const response = await fetch(`${baseUrl}/cripto_bot_estado.json`, {
+                    headers: { 'Authorization': authHeader }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    renderNodeData(nodeId, data);
+                    dot.className = "status-dot active";
+                    timeLabel.innerText = "LINK ESTABLISHED";
+                    timeLabel.style.color = "var(--neon-green)";
+                } else {
+                    throw new Error("HTTP " + response.status);
+                }
+            } catch (err) {
+                dot.className = "status-dot error";
+                timeLabel.innerText = "LINK FAILED: " + err.message;
+                timeLabel.style.color = "var(--neon-red)";
+                globalData[nodeId].connected = false;
+                updateGlobalStats();
+            }
+        }
+
+        function formatUSD(num) {
+            return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(num);
+        }
+
+        function renderNodeData(nodeId, data) {
+            globalData[nodeId].equity = data.totalEquityUsd || data.grossAssetsUsd || 0;
+            globalData[nodeId].free = data.operating_capital_usd || 0; // Aproximación
+            globalData[nodeId].slots = data.active_slots ? data.active_slots.length : 0;
+            globalData[nodeId].connected = true;
+
+            document.getElementById(`node-${nodeId}-equity`).innerText = formatUSD(globalData[nodeId].equity);
+            
+            let statusText = "NORMAL";
+            if(data.btcGuard && data.btcGuard.status !== "NORMAL") {
+                statusText = data.btcGuard.status;
+            }
+            document.getElementById(`node-${nodeId}-status`).innerText = statusText;
+            
+            if (statusText !== "NORMAL") {
+                document.getElementById(`node-${nodeId}-status`).style.color = "var(--accent-rose)";
+            } else {
+                document.getElementById(`node-${nodeId}-status`).style.color = "var(--accent-green)";
+            }
+
+            const tbody = document.getElementById(`node-${nodeId}-positions`);
+            tbody.innerHTML = "";
+
+            if (globalData[nodeId].slots === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:var(--text-muted);">No active positions</td></tr>`;
+            } else {
+                for (const pos of data.active_slots) {
+                    const pnlClass = pos.pnl_pct >= 0 ? 'val-green' : 'val-red';
+                    const pnlSign = pos.pnl_pct >= 0 ? '+' : '';
+                    const symbol = pos.ticker || pos.symbol;
+                    
+                    let trailText = `<span class="badge-trail">Stage ${pos.trailing_stage || 0}</span>`;
+
+                    const row = `
+                        <tr>
+                            <td style="font-weight:700;">${symbol}</td>
+                            <td>${pos.entry_price.toFixed(4)}</td>
+                            <td>${pos.current_price.toFixed(4)}</td>
+                            <td class="${pnlClass}">${pnlSign}${pos.pnl_pct.toFixed(2)}%</td>
+                            <td>${trailText}</td>
+                        </tr>
+                    `;
+                    tbody.innerHTML += row;
+                }
+            }
+
+            updateGlobalStats();
+        }
+
+        function updateGlobalStats() {
+            const tEq = globalData.a.equity + globalData.b.equity;
+            const tFree = globalData.a.free + globalData.b.free;
+            const tSlots = globalData.a.slots + globalData.b.slots;
+
+            document.getElementById("global-equity").innerText = formatUSD(tEq);
+            document.getElementById("global-free").innerText = formatUSD(tFree);
+            document.getElementById("global-slots").innerText = `${tSlots} / 20`;
+        }
+    </script>
+</body>
+</html>

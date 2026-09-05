@@ -1,0 +1,50 @@
+services:
+  - type: web
+    name: nodo-a-top50
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python run_system.py"
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: UNIVERSE_START
+        value: "0"
+      - key: UNIVERSE_END
+        value: "50"
+      - key: TAKE_PROFIT_PCT
+        value: "9.0"
+      - key: STOP_LOSS_PCT
+        value: "4.0"
+      - key: TRAILING_STAGE_1_LOCK
+        value: "0.3"
+      - key: BREAKEVEN_EXIT
+        value: "0.3"
+      - key: TRAILING_STAGE_2_LOCK
+        value: "4.0"
+      - key: TRAILING_LOCK_EXIT
+        value: "3.9"
+
+  - type: web
+    name: nodo-b-exotico
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python run_system.py"
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: UNIVERSE_START
+        value: "50"
+      - key: UNIVERSE_END
+        value: "100"
+      - key: TAKE_PROFIT_PCT
+        value: "12.0"
+      - key: STOP_LOSS_PCT
+        value: "7.0"
+      - key: TRAILING_STAGE_1_LOCK
+        value: "0.5"
+      - key: BREAKEVEN_EXIT
+        value: "0.5"
+      - key: TRAILING_STAGE_2_LOCK
+        value: "5.0"
+      - key: TRAILING_LOCK_EXIT
+        value: "4.8"

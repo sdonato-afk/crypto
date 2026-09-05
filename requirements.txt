@@ -1,2 +1,1 @@
-requests==2.31.0
-urllib3==2.2.1
+# No hay dependencias externas. El bot utiliza 100% librerías estándar de Python para máxima velocidad y seguridad.

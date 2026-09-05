@@ -8,30 +8,36 @@ import random
 from datetime import datetime
 from crypto_analyzer import CryptoAnalyzer
 from telegram_notifier import TelegramNotifier
+from binance_client import BinanceClient
 import urllib.request
 import sys
+
+DRY_RUN = True  # MODO SEGURO: True = Test-Net (Sin dinero real), False = LIVE TRADING
 
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8')
 
-STATE_FILE = "cripto_bot_estado.json"
+STATE_FILE = os.environ.get("STATE_FILE_NAME", "cripto_bot_estado.json")
 LOG_FILE = "cripto_bot_ejecucion.log"
 
 MAX_SLOTS = 10
-TAKE_PROFIT_PCT = 9.0
-STOP_LOSS_PCT = 4.0
-TRAILING_STAGE_1 = 4.0  # Mueve SL a Breakeven +0.3%
-TRAILING_STAGE_2 = 6.5  # Mueve SL a +4.0% Lock de ganancia
+import os
+TAKE_PROFIT_PCT = float(os.environ.get("TAKE_PROFIT_PCT", 9.0))
+STOP_LOSS_PCT = float(os.environ.get("STOP_LOSS_PCT", 4.0))
+TRAILING_STAGE_1 = float(os.environ.get("TRAILING_STAGE_1", 4.0))
+TRAILING_STAGE_1_LOCK = float(os.environ.get("TRAILING_STAGE_1_LOCK", 0.3))
+TRAILING_STAGE_2 = float(os.environ.get("TRAILING_STAGE_2", 6.5))
+TRAILING_STAGE_2_LOCK = float(os.environ.get("TRAILING_STAGE_2_LOCK", 4.0))
 BINANCE_FEE_PCT = 0.024 # Tarifas optimizadas con descuento BNB + Maker Limit Orders + Kickback
 
-INITIAL_CAPITAL_USD = 1000.0
-ENTRY_PCT = 0.50          # Entrada inicial 50% del slot
-SCALE_IN_PCT = 0.10       # Cada recompra es 10% del slot
-MIN_SCORE_ENTRY = 68.0    # Score mínimo para abrir posición
-COOLDOWN_REENTRY_SEC = 3600   # 60 min cooldown antes de reentrar en mismo ticker
-COOLDOWN_SCALE_IN_SEC = 300   # 5 min cooldown entre recompras
-TRAILING_LOCK_EXIT = 3.9      # Cierre Stage 2 con margen de gracia
-BREAKEVEN_EXIT = 0.3          # Cierre Stage 1 breakeven
+INITIAL_CAPITAL_USD = float(os.environ.get("INITIAL_CAPITAL_USD", 1000.0))
+ENTRY_PCT = float(os.environ.get("ENTRY_PCT", 0.50))          # Entrada inicial 50% del slot
+SCALE_IN_PCT = float(os.environ.get("SCALE_IN_PCT", 0.10))       # Cada recompra es 10% del slot
+MIN_SCORE_ENTRY = float(os.environ.get("MIN_SCORE_ENTRY", 68.0))    # Score mínimo para abrir posición
+COOLDOWN_REENTRY_SEC = float(os.environ.get("COOLDOWN_REENTRY_SEC", 3600))   # 60 min cooldown antes de reentrar en mismo ticker
+COOLDOWN_SCALE_IN_SEC = float(os.environ.get("COOLDOWN_SCALE_IN_SEC", 300))   # 5 min cooldown entre recompras
+TRAILING_LOCK_EXIT = float(os.environ.get("TRAILING_LOCK_EXIT", 3.9))      # Cierre Stage 2 con margen de gracia
+BREAKEVEN_EXIT = float(os.environ.get("BREAKEVEN_EXIT", 0.3))          # Cierre Stage 1 breakeven
 
 def timestamp():
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -49,6 +55,7 @@ class BinanceBotEngine:
     def __init__(self):
         self.analyzer = CryptoAnalyzer()
         self.telegram = TelegramNotifier()
+        self.client = BinanceClient(os.getenv("BINANCE_API_KEY", ""), os.getenv("BINANCE_API_SECRET", ""), dry_run=DRY_RUN)
         self.active_slots = []
         self.trade_history = []
         self.total_wins = 0
@@ -93,6 +100,13 @@ class BinanceBotEngine:
         """Ejecuta una recompra de 10% del slot (DCA o Piramidación)"""
         add_cost = slot_base * SCALE_IN_PCT
         add_qty = add_cost / current_price
+        
+        # Ejecución real en Binance (MARKET)
+        success = self.client.place_market_order(slot["symbol"], "BUY", add_qty)
+        if not success and not DRY_RUN:
+            log_message("ERROR", f"Fallo al ejecutar SCALE_IN en Binance para {slot['symbol']}")
+            return
+
         slot["total_spent"] = slot.get("total_spent", slot_base * ENTRY_PCT) + add_cost
         slot["total_qty"] = slot.get("total_qty", (slot_base * ENTRY_PCT) / entry_price) + add_qty
         slot["avg_entry_price"] = slot["total_spent"] / slot["total_qty"]
@@ -130,12 +144,19 @@ class BinanceBotEngine:
             self.total_losses = sum(1 for t in self.trade_history if t.get("result") == "LOSS")
             self.realized_pnl_usd = sum(t.get("pnl_usd", 0.0) for t in self.trade_history)
 
+            real_balance = self.client.get_usdt_balance()
+            if real_balance > 0:
+                self.operating_capital_usd = real_balance
+                log_message("INFO", f"Sincronizado balance real con Binance: ${real_balance:.2f} USDT")
+            else:
+                cap = self._calculate_capital_model()
+                self.operating_capital_usd = cap["operating_capital"]
+
             cap = self._calculate_capital_model()
             self.reinvested_70_usd = cap["reinvested_70"]
             self.profit_vault_usd = cap["vault_10"]
             self.drawdown_buffer_usd = cap["buffer_20"]
-            self.operating_capital_usd = cap["operating_capital"]
-            log_message("INFO", f"Estado cargado: {self.total_wins} Wins / {self.total_losses} Losses | PnL Realizado: ${self.realized_pnl_usd:.2f} USD")
+            log_message("INFO", f"Estado cargado: {self.total_wins} Wins / {self.total_losses} Losses | Capital de Operacion: ${self.operating_capital_usd:.2f} USD")
 
     def save_state(self):
         self.total_wins = sum(1 for t in self.trade_history if t.get("result") == "WIN")
@@ -252,6 +273,11 @@ class BinanceBotEngine:
         self.active_slots = remaining_slots
 
     def close_slot(self, slot, reason, final_net_pnl_pct):
+        # Cancelar cualquier orden OCO pendiente
+        self.client.cancel_all_orders(slot["symbol"])
+        # Ejecutar Market Sell
+        self.client.close_market(slot["symbol"], slot["total_qty"])
+
         total_spent = slot.get("total_spent", (slot.get("allocated_capital_usd", 100.0) * ENTRY_PCT))
         pnl_usd = total_spent * (final_net_pnl_pct / 100.0)
         self.net_pnl_usd += pnl_usd
@@ -324,6 +350,11 @@ class BinanceBotEngine:
                 log_message("ICEBERG", f"   ↳ Fragmento {i+1}/{len(chunks)} [{ticker}]: ${chunk_usd:.2f} USD a ${micro_price:.4f}. Pausa táctica de {delay}s...")
                 time.sleep(delay)
 
+        # Ejecucion REAL
+        success = self.client.place_market_order(ticker + "USDT" if not ticker.endswith("USDT") else ticker, "BUY", total_qty)
+        if not success and not DRY_RUN:
+             log_message("ERROR", f"Fallo orden ICEBERG en Binance para {ticker}")
+             
         avg_entry_price = spent_accum / total_qty
         log_message("ICEBERG", f"✅ [ICEBERG COMPLETADO] [{ticker}]: Entrada total de ${spent_accum:.2f} USD ejecutada desincronizada. Precio Promedio: ${avg_entry_price:.4f}")
         return avg_entry_price, total_qty, spent_accum
@@ -379,6 +410,11 @@ class BinanceBotEngine:
                     "score": score,
                     "signal": analysis["signal"]
                 }
+
+                # Ejecutar OCO Real
+                tp_price = avg_entry_price * (1 + (TAKE_PROFIT_PCT / 100))
+                sl_price = avg_entry_price * (1 - (STOP_LOSS_PCT / 100))
+                self.client.place_oco_order(analysis["symbol"], total_qty, tp_price, sl_price, sl_price)
 
                 self.active_slots.append(new_slot)
                 open_tickers.add(ticker)

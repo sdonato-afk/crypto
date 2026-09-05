@@ -7,8 +7,8 @@ import time
 
 class CryptoAnalyzer:
     def __init__(self):
-        self.binance_klines_url = "https://api.binance.com/api/v3/klines"
-        self.binance_ticker_url = "https://api.binance.com/api/v3/ticker/24hr"
+        self.binance_klines_url = "https://data-api.binance.vision/api/v3/klines"
+        self.binance_ticker_url = "https://data-api.binance.vision/api/v3/ticker/24hr"
 
     def fetch_klines(self, symbol, interval="5m", limit=30):
         """Consulta velas de temporalidad corta para análisis técnico (con reintentos)"""
@@ -38,7 +38,7 @@ class CryptoAnalyzer:
 
     def fetch_ticker_price(self, symbol):
         """Consulta precio actual de un ticker específico (para slots que salieron del Top 50-100)"""
-        url = f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}"
+        url = f"https://data-api.binance.vision/api/v3/ticker/price?symbol={symbol}"
         for attempt in range(3):
             try:
                 req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
@@ -61,7 +61,11 @@ class CryptoAnalyzer:
                     usdt_pairs.sort(key=lambda x: float(x['quoteVolume']), reverse=True)
                     # Filtrar tokens con precio < $0.001 que distorsionan cantidades
                     usdt_pairs = [p for p in usdt_pairs if float(p['lastPrice']) >= 0.001]
-                    top_50_100 = usdt_pairs[50:100]
+                    
+                    import os
+                    u_start = int(os.environ.get("UNIVERSE_START", 50))
+                    u_end = int(os.environ.get("UNIVERSE_END", 100))
+                    top_50_100 = usdt_pairs[u_start:u_end]
                     
                     results = []
                     for p in top_50_100:
