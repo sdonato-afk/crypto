@@ -1,7 +1,6 @@
 # telegram_notifier.py - Módulo de Notificaciones en Tiempo Real a Telegram
 import json
 import urllib.request
-import urllib.parse
 import os
 
 TELEGRAM_CONFIG_FILE = "telegram_config.json"

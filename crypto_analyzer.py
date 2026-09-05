@@ -34,6 +34,7 @@ class CryptoAnalyzer:
                 else:
                     print(f"[WARN] fetch_klines({symbol}) falló tras 3 intentos: {e}")
                     return []
+        return []  # Guardia defensiva
 
     def fetch_ticker_price(self, symbol):
         """Consulta precio actual de un ticker específico (para slots que salieron del Top 50-100)"""
@@ -74,6 +75,7 @@ class CryptoAnalyzer:
                 else:
                     print(f"[WARN] get_top_50_100_symbols() falló tras 3 intentos: {e}")
                     return []
+        return []  # Guardia defensiva
 
     def check_btc_guard(self):
         """BTC Guard: Monitorea flash crash de Bitcoin (> -1.2% en 15m)"""
@@ -133,7 +135,6 @@ class CryptoAnalyzer:
 
         current_price = candles[-1]["close"]
         high_2h = max(c["high"] for c in candles)
-        low_2h = min(c["low"] for c in candles)
         dip_pct = ((current_price - high_2h) / high_2h) * 100.0
 
         last_candle = candles[-1]
@@ -160,7 +161,7 @@ class CryptoAnalyzer:
         recent_lows = [c["low"] for c in candles[-12:]]
         l1 = min(recent_lows[:6])
         l2 = min(recent_lows[6:])
-        is_w_bottom = (abs(l1 - l2) / l1 <= 0.008)
+        is_w_bottom = (abs(l1 - l2) / l1 <= 0.008) if l1 > 0 else False
 
         score = 40.0
 
@@ -208,7 +209,7 @@ class CryptoAnalyzer:
             "signal": signal
         }
 
-    def rank_top_20(self, crypto_list=None):
+    def rank_universe(self, crypto_list=None):
         """Analiza y ordena los activos del Top 50-100 por Absorción de Volumen y Geometría"""
         results = []
         btc_status = self.check_btc_guard()

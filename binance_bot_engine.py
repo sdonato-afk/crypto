@@ -25,6 +25,13 @@ TRAILING_STAGE_2 = 6.5  # Mueve SL a +4.0% Lock de ganancia
 BINANCE_FEE_PCT = 0.024 # Tarifas optimizadas con descuento BNB + Maker Limit Orders + Kickback
 
 INITIAL_CAPITAL_USD = 1000.0
+ENTRY_PCT = 0.50          # Entrada inicial 50% del slot
+SCALE_IN_PCT = 0.10       # Cada recompra es 10% del slot
+MIN_SCORE_ENTRY = 68.0    # Score mínimo para abrir posición
+COOLDOWN_REENTRY_SEC = 3600   # 60 min cooldown antes de reentrar en mismo ticker
+COOLDOWN_SCALE_IN_SEC = 300   # 5 min cooldown entre recompras
+TRAILING_LOCK_EXIT = 3.9      # Cierre Stage 2 con margen de gracia
+BREAKEVEN_EXIT = 0.3          # Cierre Stage 1 breakeven
 
 def timestamp():
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -57,6 +64,46 @@ class BinanceBotEngine:
         self.btc_guard_status = {"status": "NORMAL", "reason": "Iniciando bot", "drop_pct": 0.0}
         self.load_state()
 
+    def _calculate_capital_model(self):
+        """Calcula el modelo de capital 70-20-10 a partir del historial de trades"""
+        win_profits = sum(t.get("pnl_usd", 0.0) for t in self.trade_history if t.get("pnl_usd", 0.0) > 0)
+        loss_totals = abs(sum(t.get("pnl_usd", 0.0) for t in self.trade_history if t.get("pnl_usd", 0.0) < 0))
+
+        reinvested_70 = round(win_profits * 0.70, 2)
+        vault_10 = round(win_profits * 0.10, 2)
+        potential_buffer = win_profits * 0.20
+
+        if potential_buffer >= loss_totals:
+            buffer_20 = round(potential_buffer - loss_totals, 2)
+            unabsorbed_loss = 0.0
+        else:
+            buffer_20 = 0.0
+            unabsorbed_loss = loss_totals - potential_buffer
+
+        operating_capital = round(INITIAL_CAPITAL_USD + reinvested_70 - unabsorbed_loss, 2)
+
+        return {
+            "operating_capital": operating_capital,
+            "reinvested_70": reinvested_70,
+            "buffer_20": buffer_20,
+            "vault_10": vault_10
+        }
+
+    def _execute_scale_in(self, slot, slot_base, entry_price, current_price, reason):
+        """Ejecuta una recompra de 10% del slot (DCA o Piramidación)"""
+        add_cost = slot_base * SCALE_IN_PCT
+        add_qty = add_cost / current_price
+        slot["total_spent"] = slot.get("total_spent", slot_base * ENTRY_PCT) + add_cost
+        slot["total_qty"] = slot.get("total_qty", (slot_base * ENTRY_PCT) / entry_price) + add_qty
+        slot["avg_entry_price"] = slot["total_spent"] / slot["total_qty"]
+        slot["allocated_pct"] = slot.get("allocated_pct", ENTRY_PCT) + SCALE_IN_PCT
+        slot["last_scale_timestamp"] = time.time()
+        ticker = slot["ticker"]
+        if reason == "DCA":
+            log_message("SCALE_IN", f"➕ RECOMPRA DCA 10% [{ticker}]: Nuevo precio promedio: ${slot['avg_entry_price']:.4f} USD.")
+        else:
+            log_message("SCALE_IN", f"🚀 PIRAMIDACIÓN MOMENTUM 10% [{ticker}]: Carga incrementada. Precio promedio: ${slot['avg_entry_price']:.4f} USD.")
+
     def load_state(self):
         data = None
         if os.path.exists(STATE_FILE):
@@ -83,21 +130,11 @@ class BinanceBotEngine:
             self.total_losses = sum(1 for t in self.trade_history if t.get("result") == "LOSS")
             self.realized_pnl_usd = sum(t.get("pnl_usd", 0.0) for t in self.trade_history)
 
-            win_profits = sum(t.get("pnl_usd", 0.0) for t in self.trade_history if t.get("pnl_usd", 0.0) > 0)
-            loss_totals = abs(sum(t.get("pnl_usd", 0.0) for t in self.trade_history if t.get("pnl_usd", 0.0) < 0))
-
-            self.reinvested_70_usd = round(win_profits * 0.70, 2)
-            self.profit_vault_usd = round(win_profits * 0.10, 2)
-            potential_buffer = win_profits * 0.20
-            
-            if potential_buffer >= loss_totals:
-                self.drawdown_buffer_usd = round(potential_buffer - loss_totals, 2)
-                unabsorbed_loss = 0.0
-            else:
-                self.drawdown_buffer_usd = 0.0
-                unabsorbed_loss = loss_totals - potential_buffer
-
-            self.operating_capital_usd = round(INITIAL_CAPITAL_USD + self.reinvested_70_usd - unabsorbed_loss, 2)
+            cap = self._calculate_capital_model()
+            self.reinvested_70_usd = cap["reinvested_70"]
+            self.profit_vault_usd = cap["vault_10"]
+            self.drawdown_buffer_usd = cap["buffer_20"]
+            self.operating_capital_usd = cap["operating_capital"]
             log_message("INFO", f"Estado cargado: {self.total_wins} Wins / {self.total_losses} Losses | PnL Realizado: ${self.realized_pnl_usd:.2f} USD")
 
     def save_state(self):
@@ -119,21 +156,11 @@ class BinanceBotEngine:
         total_net_pnl = realized_pnl + floating_pnl
         total_equity = INITIAL_CAPITAL_USD + total_net_pnl
 
-        win_profits = sum(t.get("pnl_usd", 0.0) for t in self.trade_history if t.get("pnl_usd", 0.0) > 0)
-        loss_totals = abs(sum(t.get("pnl_usd", 0.0) for t in self.trade_history if t.get("pnl_usd", 0.0) < 0))
-
-        reinvested_70 = round(win_profits * 0.70, 2)
-        vault_10 = round(win_profits * 0.10, 2)
-        potential_buffer = win_profits * 0.20
-
-        if potential_buffer >= loss_totals:
-            buffer_20 = round(potential_buffer - loss_totals, 2)
-            unabsorbed_loss = 0.0
-        else:
-            buffer_20 = 0.0
-            unabsorbed_loss = loss_totals - potential_buffer
-
-        operating_capital = round(INITIAL_CAPITAL_USD + reinvested_70 - unabsorbed_loss, 2)
+        cap = self._calculate_capital_model()
+        reinvested_70 = cap["reinvested_70"]
+        vault_10 = cap["vault_10"]
+        buffer_20 = cap["buffer_20"]
+        operating_capital = cap["operating_capital"]
 
         state = {
             "botStatus": "PAPER_TRADING_TOP50_100_ACTIVO",
@@ -183,53 +210,39 @@ class BinanceBotEngine:
             net_pnl_pct = raw_pnl_pct - (BINANCE_FEE_PCT * 2)
 
             slot_base = slot.get("allocated_capital_usd", round(self.operating_capital_usd / MAX_SLOTS, 2))
-            allocated_pct = slot.get("allocated_pct", 0.50)
+            allocated_pct = slot.get("allocated_pct", ENTRY_PCT)
 
             # Escalonamiento del 10% adicional en Dips (-1.2%) o Momentum (+2.0%)
             last_scale = slot.get("last_scale_timestamp", 0)
-            scale_cooldown_ok = (time.time() - last_scale) >= 300  # 5 min entre recompras
+            scale_cooldown_ok = (time.time() - last_scale) >= COOLDOWN_SCALE_IN_SEC
 
             if net_pnl_pct <= -1.2 and allocated_pct < 1.0 and scale_cooldown_ok:
-                add_cost = slot_base * 0.10
-                add_qty = add_cost / current_price
-                slot["total_spent"] = slot.get("total_spent", slot_base * 0.50) + add_cost
-                slot["total_qty"] = slot.get("total_qty", (slot_base * 0.50) / entry_price) + add_qty
-                slot["avg_entry_price"] = slot["total_spent"] / slot["total_qty"]
-                slot["allocated_pct"] = allocated_pct + 0.10
-                slot["last_scale_timestamp"] = time.time()
-                log_message("SCALE_IN", f"➕ RECOMPRA DCA 10% [{ticker}]: Nuevo precio promedio: ${slot['avg_entry_price']:.4f} USD.")
+                self._execute_scale_in(slot, slot_base, entry_price, current_price, "DCA")
             elif net_pnl_pct >= 2.0 and allocated_pct < 1.0 and net_pnl_pct < 7.0 and scale_cooldown_ok:
-                add_cost = slot_base * 0.10
-                add_qty = add_cost / current_price
-                slot["total_spent"] = slot.get("total_spent", slot_base * 0.50) + add_cost
-                slot["total_qty"] = slot.get("total_qty", (slot_base * 0.50) / entry_price) + add_qty
-                slot["avg_entry_price"] = slot["total_spent"] / slot["total_qty"]
-                slot["allocated_pct"] = allocated_pct + 0.10
-                slot["last_scale_timestamp"] = time.time()
-                log_message("SCALE_IN", f"🚀 PIRAMIDACIÓN MOMENTUM 10% [{ticker}]: Carga incrementada. Precio promedio: ${slot['avg_entry_price']:.4f} USD.")
+                self._execute_scale_in(slot, slot_base, entry_price, current_price, "MOMENTUM")
 
             slot["current_price"] = current_price
             slot["pnl_pct"] = round(net_pnl_pct, 2)
-            slot["pnl_usd"] = round(slot.get("total_spent", slot_base * 0.50) * (net_pnl_pct / 100.0), 2)
+            slot["pnl_usd"] = round(slot.get("total_spent", slot_base * ENTRY_PCT) * (net_pnl_pct / 100.0), 2)
 
             trailing_stage = slot.get("trailing_stage", 0)
 
             # Trailing Stop Escalonado
             if net_pnl_pct >= TRAILING_STAGE_1 and trailing_stage < 1:
                 slot["trailing_stage"] = 1
-                log_message("OCO_TRAIL", f"🔒 TRAILING 1 [{ticker}]: Ganancia al +{net_pnl_pct:.2f}%. Stop elevado a Breakeven (+0.3%).")
-            elif net_pnl_pct >= TRAILING_STAGE_2 and trailing_stage < 2:
+                log_message("OCO_TRAIL", f"🔒 TRAILING 1 [{ticker}]: Ganancia al +{net_pnl_pct:.2f}%. Stop elevado a Breakeven (+{BREAKEVEN_EXIT}%).")
+            if net_pnl_pct >= TRAILING_STAGE_2 and slot.get("trailing_stage", 0) < 2:
                 slot["trailing_stage"] = 2
-                log_message("OCO_TRAIL", f"🔥 TRAILING 2 [{ticker}]: Ganancia al +{net_pnl_pct:.2f}%. Stop elevado a Lock (+4.0%).")
+                log_message("OCO_TRAIL", f"🔥 TRAILING 2 [{ticker}]: Ganancia al +{net_pnl_pct:.2f}%. Stop elevado a Lock (+{TRAILING_LOCK_EXIT}%).")
 
             current_stage = slot.get("trailing_stage", 0)
 
             # Cierres
             if net_pnl_pct >= TAKE_PROFIT_PCT:
                 self.close_slot(slot, "OCO_TAKE_PROFIT", net_pnl_pct)
-            elif current_stage == 2 and net_pnl_pct <= 3.9:
+            elif current_stage == 2 and net_pnl_pct <= TRAILING_LOCK_EXIT:
                 self.close_slot(slot, "TRAILING_LOCK_4PCT", net_pnl_pct)
-            elif current_stage == 1 and net_pnl_pct <= 0.3:
+            elif current_stage == 1 and net_pnl_pct <= BREAKEVEN_EXIT:
                 self.close_slot(slot, "TRAILING_BREAKEVEN", net_pnl_pct)
             elif current_stage == 0 and net_pnl_pct <= -STOP_LOSS_PCT:
                 self.close_slot(slot, "OCO_STOP_LOSS", net_pnl_pct)
@@ -239,7 +252,7 @@ class BinanceBotEngine:
         self.active_slots = remaining_slots
 
     def close_slot(self, slot, reason, final_net_pnl_pct):
-        total_spent = slot.get("total_spent", (slot.get("allocated_capital_usd", 100.0) * 0.50))
+        total_spent = slot.get("total_spent", (slot.get("allocated_capital_usd", 100.0) * ENTRY_PCT))
         pnl_usd = total_spent * (final_net_pnl_pct / 100.0)
         self.net_pnl_usd += pnl_usd
 
@@ -336,12 +349,12 @@ class BinanceBotEngine:
 
             # Cooldown de 60 minutos (3600 segundos) por moneda
             last_closed = self.last_closed_timestamps.get(ticker, 0)
-            if (now - last_closed) < 3600:
+            if (now - last_closed) < COOLDOWN_REENTRY_SEC:
                 continue
 
-            if ticker not in open_tickers and score >= 68.0 and analysis["price"] > 0:
+            if ticker not in open_tickers and score >= MIN_SCORE_ENTRY and analysis["price"] > 0:
                 slot_capital = round(self.operating_capital_usd / MAX_SLOTS, 2)
-                initial_entry_cost = round(slot_capital * 0.50, 2)
+                initial_entry_cost = round(slot_capital * ENTRY_PCT, 2)
                 
                 avg_entry_price, total_qty, total_spent = self.execute_iceberg_order(ticker, initial_entry_cost, analysis["price"])
 
@@ -357,7 +370,7 @@ class BinanceBotEngine:
                     "allocated_capital_usd": slot_capital,
                     "total_spent": total_spent,
                     "total_qty": total_qty,
-                    "allocated_pct": 0.50,
+                    "allocated_pct": ENTRY_PCT,
                     "take_profit_pct": TAKE_PROFIT_PCT,
                     "stop_loss_pct": -STOP_LOSS_PCT,
                     "trailing_stage": 0,
@@ -379,7 +392,7 @@ class BinanceBotEngine:
 
     def run_cycle(self):
         log_message("INFO", "--- ESCANEANDO TOP 50-100 Y EVALUANDO SLOTS DE PAPER TRADING ---")
-        ranked_analyses, btc_status = self.analyzer.rank_top_20() # Top 50-100 dinámico
+        ranked_analyses, btc_status = self.analyzer.rank_universe() # Top 50-100 dinámico
         self.btc_guard_status = btc_status
         
         self.update_open_slots(ranked_analyses)
@@ -389,7 +402,7 @@ class BinanceBotEngine:
         return ranked_analyses
 
 def main():
-    log_message("INFO", "=== BOT CRIPTO DEFINTIVO TOP 50-100 (50%+10% ESCALONADO + GEOMETRIA + REINVERSION 70-20-10) ===")
+    log_message("INFO", "=== BOT CRIPTO DEFINITIVO TOP 50-100 (50%+10% ESCALONADO + GEOMETRIA + REINVERSION 70-20-10) ===")
     engine = BinanceBotEngine()
 
     try:

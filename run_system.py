@@ -68,7 +68,7 @@ def keep_alive_loop():
 
 def main():
     log_message("INFO", f"=== INICIANDO BOT CRIPTO CON MANTENIMIENTO 24/7 Y DASHBOARD PROTEGIDO (PUERTO {PORT}) ===")
-    log_message("INFO", f"Credenciales Dashboard -> Usuario: '{DASHBOARD_USER}' | Password: '{DASHBOARD_PASS}'")
+    log_message("INFO", f"Credenciales Dashboard -> Usuario: '{DASHBOARD_USER}' | Password: '****'")
     
     # 1. Iniciar Servidor HTTP local/cloud
     server_thread = threading.Thread(target=run_http_server, daemon=True)
