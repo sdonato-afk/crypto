@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: nodo-b-exotico
+    env: python
+    plan: free
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python run_system.py"
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: UNIVERSE_START
+        value: "50"
+      - key: UNIVERSE_END
+        value: "100"
+      - key: TAKE_PROFIT_PCT
+        value: "12.0"
+      - key: STOP_LOSS_PCT
+        value: "7.0"
+      - key: TRAILING_STAGE_1_LOCK
+        value: "0.5"
+      - key: BREAKEVEN_EXIT
+        value: "0.5"
+      - key: TRAILING_STAGE_2_LOCK
+        value: "5.0"
+      - key: TRAILING_LOCK_EXIT
+        value: "4.8"
+      - key: STATE_FILE_NAME
+        value: "cripto_bot_estado.json"
