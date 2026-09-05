@@ -131,7 +131,10 @@ class BinanceBotEngine:
             log_message("SCALE_IN", f"🚀 PIRAMIDACIÓN MOMENTUM 10% [{ticker}]: Carga incrementada. Precio promedio: ${slot['avg_entry_price']:.4f} USD.")
 
     def load_state(self):
-        # Si FRESH_START=1, borrar estado viejo y arrancar limpio
+        current_u_start = int(os.environ.get("UNIVERSE_START", 50))
+        current_u_end   = int(os.environ.get("UNIVERSE_END", 100))
+
+        # Si FRESH_START=1, limpiar estado viejo
         if os.environ.get("FRESH_START", "0") == "1":
             if os.path.exists(STATE_FILE):
                 os.remove(STATE_FILE)
@@ -144,6 +147,14 @@ class BinanceBotEngine:
                 with open(STATE_FILE, "r", encoding="utf-8") as f:
                     data = json.load(f)
             except Exception:
+                data = None
+
+        # Auto-deteccion: si el universo guardado no coincide con el actual, limpiar
+        if data:
+            saved_u_start = data.get("universe_start", -1)
+            saved_u_end   = data.get("universe_end", -1)
+            if saved_u_start != current_u_start or saved_u_end != current_u_end:
+                log_message("INFO", f"Universo cambio ({saved_u_start}-{saved_u_end} -> {current_u_start}-{current_u_end}). Limpiando estado anterior automaticamente.")
                 data = None
 
         # Nota: No cargamos estado desde GitHub en la nube para evitar que nodos
@@ -198,6 +209,8 @@ class BinanceBotEngine:
         state = {
             "botStatus": "PAPER_TRADING_TOP50_100_ACTIVO",
             "executionMode": "PAPER_TRADING_REAL_MARKET_DATA",
+            "universe_start": int(os.environ.get("UNIVERSE_START", 50)),
+            "universe_end": int(os.environ.get("UNIVERSE_END", 100)),
             "lastRun": timestamp(),
             "btcGuard": self.btc_guard_status,
             "activeSlotsCount": len(self.active_slots),
