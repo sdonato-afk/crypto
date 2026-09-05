@@ -2,6 +2,7 @@ services:
   - type: web
     name: nodo-a-top50
     env: python
+    plan: free
     buildCommand: "pip install -r requirements.txt"
     startCommand: "python run_system.py"
     envVars:
@@ -27,6 +28,7 @@ services:
   - type: web
     name: nodo-b-exotico
     env: python
+    plan: free
     buildCommand: "pip install -r requirements.txt"
     startCommand: "python run_system.py"
     envVars:
