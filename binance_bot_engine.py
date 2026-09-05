@@ -17,11 +17,23 @@ DRY_RUN = True  # MODO SEGURO: True = Test-Net (Sin dinero real), False = LIVE T
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8')
 
+# ─── Limitar tamaño del log para evitar que el disco de Render se llene ─────
+def trim_log_if_needed(log_file, max_lines=3000):
+    try:
+        if os.path.exists(log_file):
+            with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
+                lines = f.readlines()
+            if len(lines) > max_lines:
+                with open(log_file, 'w', encoding='utf-8') as f:
+                    f.writelines(lines[-max_lines:])
+    except Exception:
+        pass
+
 STATE_FILE = os.environ.get("STATE_FILE_NAME", "cripto_bot_estado.json")
 LOG_FILE = "cripto_bot_ejecucion.log"
+trim_log_if_needed(LOG_FILE)
 
 MAX_SLOTS = 10
-import os
 TAKE_PROFIT_PCT = float(os.environ.get("TAKE_PROFIT_PCT", 9.0))
 STOP_LOSS_PCT = float(os.environ.get("STOP_LOSS_PCT", 4.0))
 TRAILING_STAGE_1 = float(os.environ.get("TRAILING_STAGE_1", 4.0))
@@ -127,15 +139,8 @@ class BinanceBotEngine:
             except Exception:
                 data = None
 
-        if not data and "RENDER" in os.environ:
-            try:
-                raw_url = "https://raw.githubusercontent.com/sdonato-afk/crypto/main/cripto_bot_estado.json"
-                req = urllib.request.Request(raw_url, headers={'User-Agent': 'Mozilla/5.0'})
-                with urllib.request.urlopen(req, timeout=5) as resp:
-                    data = json.loads(resp.read().decode('utf-8'))
-                    log_message("INFO", "Estado recuperado desde GitHub Cloud con éxito.")
-            except Exception as e:
-                log_message("WARN", f"No se pudo cargar estado remoto desde GitHub ({e})")
+        # Nota: No cargamos estado desde GitHub en la nube para evitar que nodos
+        # compartan posiciones erróneas. Cada nodo arranca desde cero de forma segura.
 
         if data:
             self.active_slots = data.get("active_slots", [])
@@ -427,26 +432,42 @@ class BinanceBotEngine:
                     break
 
     def run_cycle(self):
-        log_message("INFO", "--- ESCANEANDO TOP 50-100 Y EVALUANDO SLOTS DE PAPER TRADING ---")
-        ranked_analyses, btc_status = self.analyzer.rank_universe() # Top 50-100 dinámico
-        self.btc_guard_status = btc_status
-        
-        self.update_open_slots(ranked_analyses)
-        self.open_new_slots(ranked_analyses)
-        self.save_state()
-        
-        return ranked_analyses
+        try:
+            log_message("INFO", "--- ESCANEANDO UNIVERSO Y EVALUANDO SLOTS ---")
+            ranked_analyses, btc_status = self.analyzer.rank_universe()
+            self.btc_guard_status = btc_status
+            
+            self.update_open_slots(ranked_analyses)
+            self.open_new_slots(ranked_analyses)
+            self.save_state()
+            
+            return ranked_analyses
+        except Exception as e:
+            # ⚠️ Escudo Anti-Crash: cualquier excepción no mata el proceso,
+            # el bot descansa 30 segundos y retoma el ciclo normalmente.
+            log_message("WARN", f"Ciclo con error recuperable: {e}. Reintentando en 30s...")
+            time.sleep(30)
+            return []
 
 def main():
-    log_message("INFO", "=== BOT CRIPTO DEFINITIVO TOP 50-100 (50%+10% ESCALONADO + GEOMETRIA + REINVERSION 70-20-10) ===")
+    log_message("INFO", "=== BOT CRIPTO INICIANDO (ARQUITECTURA DUAL - MODO PAPEL) ===")
+    log_message("INFO", f"Universo: [{os.environ.get('UNIVERSE_START','50')}-{os.environ.get('UNIVERSE_END','100')}] | TP: +{os.environ.get('TAKE_PROFIT_PCT','9')}% | SL: -{os.environ.get('STOP_LOSS_PCT','4')}%")
     engine = BinanceBotEngine()
 
-    try:
-        while True:
+    consecutive_errors = 0
+    while True:
+        try:
             engine.run_cycle()
+            consecutive_errors = 0
             time.sleep(10)
-    except KeyboardInterrupt:
-        log_message("WARN", "Bot Cripto detenido.")
+        except KeyboardInterrupt:
+            log_message("WARN", "Bot Cripto detenido por el usuario.")
+            break
+        except Exception as e:
+            consecutive_errors += 1
+            wait = min(60 * consecutive_errors, 300)  # Backoff: 1min, 2min... máx 5min
+            log_message("ERROR", f"Error crítico #{consecutive_errors} en loop principal: {e}. Esperando {wait}s antes de reintentar...")
+            time.sleep(wait)
 
 if __name__ == "__main__":
     main()
