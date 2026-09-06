@@ -8,48 +8,30 @@ import random
 from datetime import datetime
 from crypto_analyzer import CryptoAnalyzer
 from telegram_notifier import TelegramNotifier
-from binance_client import BinanceClient
 import urllib.request
 import sys
-
-DRY_RUN = True  # MODO SEGURO: True = Test-Net (Sin dinero real), False = LIVE TRADING
 
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8')
 
-# ─── Limitar tamaño del log para evitar que el disco de Render se llene ─────
-def trim_log_if_needed(log_file, max_lines=3000):
-    try:
-        if os.path.exists(log_file):
-            with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
-                lines = f.readlines()
-            if len(lines) > max_lines:
-                with open(log_file, 'w', encoding='utf-8') as f:
-                    f.writelines(lines[-max_lines:])
-    except Exception:
-        pass
-
-STATE_FILE = os.environ.get("STATE_FILE_NAME", "cripto_bot_estado.json")
+STATE_FILE = "cripto_bot_estado.json"
 LOG_FILE = "cripto_bot_ejecucion.log"
-trim_log_if_needed(LOG_FILE)
 
 MAX_SLOTS = 10
-TAKE_PROFIT_PCT = float(os.environ.get("TAKE_PROFIT_PCT", 9.0))
-STOP_LOSS_PCT = float(os.environ.get("STOP_LOSS_PCT", 4.0))
-TRAILING_STAGE_1 = float(os.environ.get("TRAILING_STAGE_1", 4.0))
-TRAILING_STAGE_1_LOCK = float(os.environ.get("TRAILING_STAGE_1_LOCK", 0.3))
-TRAILING_STAGE_2 = float(os.environ.get("TRAILING_STAGE_2", 6.5))
-TRAILING_STAGE_2_LOCK = float(os.environ.get("TRAILING_STAGE_2_LOCK", 4.0))
+TAKE_PROFIT_PCT = 9.0
+STOP_LOSS_PCT = 4.0
+TRAILING_STAGE_1 = 4.0  # Mueve SL a Breakeven +0.3%
+TRAILING_STAGE_2 = 6.5  # Mueve SL a +4.0% Lock de ganancia
 BINANCE_FEE_PCT = 0.024 # Tarifas optimizadas con descuento BNB + Maker Limit Orders + Kickback
 
-INITIAL_CAPITAL_USD = float(os.environ.get("INITIAL_CAPITAL_USD", 1000.0))
-ENTRY_PCT = float(os.environ.get("ENTRY_PCT", 0.50))          # Entrada inicial 50% del slot
-SCALE_IN_PCT = float(os.environ.get("SCALE_IN_PCT", 0.10))       # Cada recompra es 10% del slot
-MIN_SCORE_ENTRY = float(os.environ.get("MIN_SCORE_ENTRY", 68.0))    # Score mínimo para abrir posición
-COOLDOWN_REENTRY_SEC = float(os.environ.get("COOLDOWN_REENTRY_SEC", 3600))   # 60 min cooldown antes de reentrar en mismo ticker
-COOLDOWN_SCALE_IN_SEC = float(os.environ.get("COOLDOWN_SCALE_IN_SEC", 300))   # 5 min cooldown entre recompras
-TRAILING_LOCK_EXIT = float(os.environ.get("TRAILING_LOCK_EXIT", 3.9))      # Cierre Stage 2 con margen de gracia
-BREAKEVEN_EXIT = float(os.environ.get("BREAKEVEN_EXIT", 0.3))          # Cierre Stage 1 breakeven
+INITIAL_CAPITAL_USD = 1000.0
+ENTRY_PCT = 0.50          # Entrada inicial 50% del slot
+SCALE_IN_PCT = 0.10       # Cada recompra es 10% del slot
+MIN_SCORE_ENTRY = 68.0    # Score mínimo para abrir posición
+COOLDOWN_REENTRY_SEC = 3600   # 60 min cooldown antes de reentrar en mismo ticker
+COOLDOWN_SCALE_IN_SEC = 300   # 5 min cooldown entre recompras
+TRAILING_LOCK_EXIT = 3.9      # Cierre Stage 2 con margen de gracia
+BREAKEVEN_EXIT = 0.3          # Cierre Stage 1 breakeven
 
 def timestamp():
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -67,7 +49,6 @@ class BinanceBotEngine:
     def __init__(self):
         self.analyzer = CryptoAnalyzer()
         self.telegram = TelegramNotifier()
-        self.client = BinanceClient(os.getenv("BINANCE_API_KEY", ""), os.getenv("BINANCE_API_SECRET", ""), dry_run=DRY_RUN)
         self.active_slots = []
         self.trade_history = []
         self.total_wins = 0
@@ -112,13 +93,6 @@ class BinanceBotEngine:
         """Ejecuta una recompra de 10% del slot (DCA o Piramidación)"""
         add_cost = slot_base * SCALE_IN_PCT
         add_qty = add_cost / current_price
-        
-        # Ejecución real en Binance (MARKET)
-        success = self.client.place_market_order(slot["symbol"], "BUY", add_qty)
-        if not success and not DRY_RUN:
-            log_message("ERROR", f"Fallo al ejecutar SCALE_IN en Binance para {slot['symbol']}")
-            return
-
         slot["total_spent"] = slot.get("total_spent", slot_base * ENTRY_PCT) + add_cost
         slot["total_qty"] = slot.get("total_qty", (slot_base * ENTRY_PCT) / entry_price) + add_qty
         slot["avg_entry_price"] = slot["total_spent"] / slot["total_qty"]
@@ -131,16 +105,6 @@ class BinanceBotEngine:
             log_message("SCALE_IN", f"🚀 PIRAMIDACIÓN MOMENTUM 10% [{ticker}]: Carga incrementada. Precio promedio: ${slot['avg_entry_price']:.4f} USD.")
 
     def load_state(self):
-        current_u_start = int(os.environ.get("UNIVERSE_START", 50))
-        current_u_end   = int(os.environ.get("UNIVERSE_END", 100))
-
-        # Si FRESH_START=1, limpiar estado viejo
-        if os.environ.get("FRESH_START", "0") == "1":
-            if os.path.exists(STATE_FILE):
-                os.remove(STATE_FILE)
-            log_message("INFO", "FRESH_START activado: estado anterior borrado. Arrancando desde cero.")
-            return
-
         data = None
         if os.path.exists(STATE_FILE):
             try:
@@ -149,16 +113,15 @@ class BinanceBotEngine:
             except Exception:
                 data = None
 
-        # Auto-deteccion: si el universo guardado no coincide con el actual, limpiar
-        if data:
-            saved_u_start = data.get("universe_start", -1)
-            saved_u_end   = data.get("universe_end", -1)
-            if saved_u_start != current_u_start or saved_u_end != current_u_end:
-                log_message("INFO", f"Universo cambio ({saved_u_start}-{saved_u_end} -> {current_u_start}-{current_u_end}). Limpiando estado anterior automaticamente.")
-                data = None
-
-        # Nota: No cargamos estado desde GitHub en la nube para evitar que nodos
-        # compartan posiciones erróneas. Cada nodo arranca desde cero de forma segura.
+        if not data and "RENDER" in os.environ:
+            try:
+                raw_url = "https://raw.githubusercontent.com/sdonato-afk/crypto/main/cripto_bot_estado.json"
+                req = urllib.request.Request(raw_url, headers={'User-Agent': 'Mozilla/5.0'})
+                with urllib.request.urlopen(req, timeout=5) as resp:
+                    data = json.loads(resp.read().decode('utf-8'))
+                    log_message("INFO", "Estado recuperado desde GitHub Cloud con éxito.")
+            except Exception as e:
+                log_message("WARN", f"No se pudo cargar estado remoto desde GitHub ({e})")
 
         if data:
             self.active_slots = data.get("active_slots", [])
@@ -167,19 +130,12 @@ class BinanceBotEngine:
             self.total_losses = sum(1 for t in self.trade_history if t.get("result") == "LOSS")
             self.realized_pnl_usd = sum(t.get("pnl_usd", 0.0) for t in self.trade_history)
 
-            real_balance = self.client.get_usdt_balance()
-            if real_balance > 0:
-                self.operating_capital_usd = real_balance
-                log_message("INFO", f"Sincronizado balance real con Binance: ${real_balance:.2f} USDT")
-            else:
-                cap = self._calculate_capital_model()
-                self.operating_capital_usd = cap["operating_capital"]
-
             cap = self._calculate_capital_model()
             self.reinvested_70_usd = cap["reinvested_70"]
             self.profit_vault_usd = cap["vault_10"]
             self.drawdown_buffer_usd = cap["buffer_20"]
-            log_message("INFO", f"Estado cargado: {self.total_wins} Wins / {self.total_losses} Losses | Capital de Operacion: ${self.operating_capital_usd:.2f} USD")
+            self.operating_capital_usd = cap["operating_capital"]
+            log_message("INFO", f"Estado cargado: {self.total_wins} Wins / {self.total_losses} Losses | PnL Realizado: ${self.realized_pnl_usd:.2f} USD")
 
     def save_state(self):
         self.total_wins = sum(1 for t in self.trade_history if t.get("result") == "WIN")
@@ -209,8 +165,6 @@ class BinanceBotEngine:
         state = {
             "botStatus": "PAPER_TRADING_TOP50_100_ACTIVO",
             "executionMode": "PAPER_TRADING_REAL_MARKET_DATA",
-            "universe_start": int(os.environ.get("UNIVERSE_START", 50)),
-            "universe_end": int(os.environ.get("UNIVERSE_END", 100)),
             "lastRun": timestamp(),
             "btcGuard": self.btc_guard_status,
             "activeSlotsCount": len(self.active_slots),
@@ -298,11 +252,6 @@ class BinanceBotEngine:
         self.active_slots = remaining_slots
 
     def close_slot(self, slot, reason, final_net_pnl_pct):
-        # Cancelar cualquier orden OCO pendiente
-        self.client.cancel_all_orders(slot["symbol"])
-        # Ejecutar Market Sell
-        self.client.close_market(slot["symbol"], slot["total_qty"])
-
         total_spent = slot.get("total_spent", (slot.get("allocated_capital_usd", 100.0) * ENTRY_PCT))
         pnl_usd = total_spent * (final_net_pnl_pct / 100.0)
         self.net_pnl_usd += pnl_usd
@@ -375,11 +324,6 @@ class BinanceBotEngine:
                 log_message("ICEBERG", f"   ↳ Fragmento {i+1}/{len(chunks)} [{ticker}]: ${chunk_usd:.2f} USD a ${micro_price:.4f}. Pausa táctica de {delay}s...")
                 time.sleep(delay)
 
-        # Ejecucion REAL
-        success = self.client.place_market_order(ticker + "USDT" if not ticker.endswith("USDT") else ticker, "BUY", total_qty)
-        if not success and not DRY_RUN:
-             log_message("ERROR", f"Fallo orden ICEBERG en Binance para {ticker}")
-             
         avg_entry_price = spent_accum / total_qty
         log_message("ICEBERG", f"✅ [ICEBERG COMPLETADO] [{ticker}]: Entrada total de ${spent_accum:.2f} USD ejecutada desincronizada. Precio Promedio: ${avg_entry_price:.4f}")
         return avg_entry_price, total_qty, spent_accum
@@ -436,11 +380,6 @@ class BinanceBotEngine:
                     "signal": analysis["signal"]
                 }
 
-                # Ejecutar OCO Real
-                tp_price = avg_entry_price * (1 + (TAKE_PROFIT_PCT / 100))
-                sl_price = avg_entry_price * (1 - (STOP_LOSS_PCT / 100))
-                self.client.place_oco_order(analysis["symbol"], total_qty, tp_price, sl_price, sl_price)
-
                 self.active_slots.append(new_slot)
                 open_tickers.add(ticker)
                 free_slots -= 1
@@ -452,42 +391,26 @@ class BinanceBotEngine:
                     break
 
     def run_cycle(self):
-        try:
-            log_message("INFO", "--- ESCANEANDO UNIVERSO Y EVALUANDO SLOTS ---")
-            ranked_analyses, btc_status = self.analyzer.rank_universe()
-            self.btc_guard_status = btc_status
-            
-            self.update_open_slots(ranked_analyses)
-            self.open_new_slots(ranked_analyses)
-            self.save_state()
-            
-            return ranked_analyses
-        except Exception as e:
-            # ⚠️ Escudo Anti-Crash: cualquier excepción no mata el proceso,
-            # el bot descansa 30 segundos y retoma el ciclo normalmente.
-            log_message("WARN", f"Ciclo con error recuperable: {e}. Reintentando en 30s...")
-            time.sleep(30)
-            return []
+        log_message("INFO", "--- ESCANEANDO TOP 50-100 Y EVALUANDO SLOTS DE PAPER TRADING ---")
+        ranked_analyses, btc_status = self.analyzer.rank_universe() # Top 50-100 dinámico
+        self.btc_guard_status = btc_status
+        
+        self.update_open_slots(ranked_analyses)
+        self.open_new_slots(ranked_analyses)
+        self.save_state()
+        
+        return ranked_analyses
 
 def main():
-    log_message("INFO", "=== BOT CRIPTO INICIANDO (ARQUITECTURA DUAL - MODO PAPEL) ===")
-    log_message("INFO", f"Universo: [{os.environ.get('UNIVERSE_START','50')}-{os.environ.get('UNIVERSE_END','100')}] | TP: +{os.environ.get('TAKE_PROFIT_PCT','9')}% | SL: -{os.environ.get('STOP_LOSS_PCT','4')}%")
+    log_message("INFO", "=== BOT CRIPTO DEFINITIVO TOP 50-100 (50%+10% ESCALONADO + GEOMETRIA + REINVERSION 70-20-10) ===")
     engine = BinanceBotEngine()
 
-    consecutive_errors = 0
-    while True:
-        try:
+    try:
+        while True:
             engine.run_cycle()
-            consecutive_errors = 0
             time.sleep(10)
-        except KeyboardInterrupt:
-            log_message("WARN", "Bot Cripto detenido por el usuario.")
-            break
-        except Exception as e:
-            consecutive_errors += 1
-            wait = min(60 * consecutive_errors, 300)  # Backoff: 1min, 2min... máx 5min
-            log_message("ERROR", f"Error crítico #{consecutive_errors} en loop principal: {e}. Esperando {wait}s antes de reintentar...")
-            time.sleep(wait)
+    except KeyboardInterrupt:
+        log_message("WARN", "Bot Cripto detenido.")
 
 if __name__ == "__main__":
     main()

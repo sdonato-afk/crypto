@@ -19,16 +19,6 @@ DASHBOARD_PASS = os.environ.get("DASHBOARD_PASS", "cripto2026")
 EXPECTED_AUTH = "Basic " + base64.b64encode(f"{DASHBOARD_USER}:{DASHBOARD_PASS}".encode("utf-8")).decode("utf-8")
 
 class QuietHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
-    def end_headers(self):
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type")
-        super().end_headers()
-
-    def do_OPTIONS(self):
-        self.send_response(200)
-        self.end_headers()
-
     def log_message(self, format, *args):
         pass # Silenciar logs HTTP habituales
 
@@ -46,12 +36,6 @@ class QuietHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         if not self.check_auth():
             return
-            
-        import os
-        state_file = os.environ.get("STATE_FILE_NAME", "cripto_bot_estado.json")
-        if self.path == "/cripto_bot_estado.json" and state_file != "cripto_bot_estado.json":
-            self.path = "/" + state_file
-            
         super().do_GET()
 
     def do_HEAD(self):
@@ -95,11 +79,10 @@ def main():
         keep_thread = threading.Thread(target=keep_alive_loop, daemon=True)
         keep_thread.start()
     else:
-        if not os.environ.get("NO_BROWSER"):
-            try:
-                webbrowser.open(f"http://localhost:{PORT}/dashboard_cripto.html")
-            except Exception:
-                pass
+        try:
+            webbrowser.open(f"http://localhost:{PORT}/dashboard_cripto.html")
+        except Exception:
+            pass
 
     # 3. Correr loop continuo del Motor de Trading
     engine = BinanceBotEngine()
