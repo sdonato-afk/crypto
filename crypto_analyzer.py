@@ -57,18 +57,38 @@ class CryptoAnalyzer:
                 req = urllib.request.Request(self.binance_ticker_url, headers={'User-Agent': 'Mozilla/5.0'})
                 with urllib.request.urlopen(req, timeout=8) as resp:
                     data = json.loads(resp.read().decode())
-                    usdt_pairs = [d for d in data if d['symbol'].endswith('USDT') and not d['symbol'].startswith('UP') and not d['symbol'].startswith('DOWN') and not 'BEAR' in d['symbol'] and not 'BULL' in d['symbol'] and not 'FDUSD' in d['symbol'] and not 'USDC' in d['symbol'] and not 'TUSD' in d['symbol'] and not 'EUR' in d['symbol']]
+                    # --- FILTRO CAPA 1: Excluir pares con keywords de stablecoins / apalancados ---
+                    STABLECOIN_KEYWORDS = [
+                        'UP', 'DOWN', 'BEAR', 'BULL', 'FDUSD', 'USDC', 'TUSD', 'EUR',
+                        'USD1', 'USD2', 'USD3', 'USDS', 'USDP', 'USDX', 'USDQ',
+                        'BUSD', 'DAI', 'FRAX', 'LUSD', 'SUSD', 'PYUSD', 'USDD',
+                        'OUSD', 'CUSD', 'GUSD', 'HUSD', 'EURS', 'EURC', 'EURI',
+                        'PAX', 'AGEUR', 'AEUR', 'UST', 'USDN', 'USDT'
+                    ]
+                    usdt_pairs = [
+                        d for d in data
+                        if d['symbol'].endswith('USDT')
+                        and not any(kw in d['symbol'].replace('USDT','') for kw in STABLECOIN_KEYWORDS)
+                    ]
+
                     usdt_pairs.sort(key=lambda x: float(x['quoteVolume']), reverse=True)
-                    # Filtrar tokens con precio < $0.001 que distorsionan cantidades
-                    usdt_pairs = [p for p in usdt_pairs if float(p['lastPrice']) >= 0.001]
-                    
+
+                    # --- FILTRO CAPA 2: microtokens (<$0.001) y activos sin volatilidad (stablecoins disfrazadas) ---
+                    # Un activo real siempre tiene >0.5% de movimiento diario.
+                    # Una stablecoin (aunque cotice a $1 o a cualquier precio) casi no se mueve.
+                    usdt_pairs = [
+                        p for p in usdt_pairs
+                        if float(p['lastPrice']) >= 0.001
+                        and abs(float(p.get('priceChangePercent', 99))) >= 0.5
+                    ]
+
                     import os
                     u_start = int(os.environ.get("UNIVERSE_START", 50))
-                    u_end = int(os.environ.get("UNIVERSE_END", 100))
-                    top_50_100 = usdt_pairs[u_start:u_end]
-                    
+                    u_end   = int(os.environ.get("UNIVERSE_END", 100))
+                    top_slice = usdt_pairs[u_start:u_end]
+
                     results = []
-                    for p in top_50_100:
+                    for p in top_slice:
                         symbol = p['symbol']
                         ticker = symbol.replace('USDT', '')
                         results.append({"ticker": ticker, "name": ticker, "symbol": symbol})
