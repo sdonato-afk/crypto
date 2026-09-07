@@ -3,525 +3,838 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MAESTRO | Fleet Command</title>
+    <title>MAESTRO | Fleet Command · 4 Granjas & Bóveda</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
     <style>
         :root {
             --bg-dark: #03050c;
+            --bg-sidebar: #070a14;
             --bg-card: rgba(11, 16, 32, 0.85);
-            --bg-card-hover: rgba(18, 26, 50, 0.95);
             --border-color: rgba(255, 255, 255, 0.08);
-            --border-highlight: rgba(6, 182, 212, 0.4);
-            
             --text-main: #f8fafc;
             --text-muted: #94a3b8;
             --text-dim: #64748b;
-            
             --accent-cyan: #06b6d4;
             --accent-cyan-glow: rgba(6, 182, 212, 0.35);
             --accent-green: #10b981;
             --accent-purple: #8b5cf6;
             --accent-amber: #f59e0b;
             --accent-rose: #f43f5e;
-            
-            --radius-lg: 16px;
-            --radius-md: 12px;
-            --radius-sm: 8px;
-            
-            --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            --radius-lg: 14px;
+            --radius-md: 10px;
+            --radius-sm: 6px;
+            --font-sans: 'Plus Jakarta Sans', sans-serif;
             --font-mono: 'JetBrains Mono', monospace;
         }
 
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
         body {
             background-color: var(--bg-dark);
-            background-image: 
-                radial-gradient(at 0% 0%, rgba(6, 182, 212, 0.12) 0px, transparent 45%),
-                radial-gradient(at 100% 0%, rgba(139, 92, 246, 0.12) 0px, transparent 45%),
-                radial-gradient(at 50% 100%, rgba(16, 185, 129, 0.08) 0px, transparent 50%);
-            background-attachment: fixed;
             color: var(--text-main);
             font-family: var(--font-sans);
-            margin: 0;
-            padding: 24px;
-            font-size: 13px;
-        }
-
-        .header {
-            border-bottom: 1px solid var(--border-color);
-            padding-bottom: 15px;
-            margin-bottom: 24px;
             display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .title {
-            font-size: 24px;
-            font-weight: 800;
-            background: linear-gradient(90deg, #ffffff, #38bdf8);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            text-transform: uppercase;
-            letter-spacing: -0.5px;
-        }
-
-        .controls {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-        }
-
-        input {
-            background: rgba(255,255,255,0.05);
-            border: 1px solid var(--border-color);
-            color: var(--accent-cyan);
-            padding: 8px 12px;
-            font-family: var(--font-mono);
-            font-size: 12px;
-            border-radius: var(--radius-sm);
-        }
-
-        input:focus {
-            outline: none;
-            border-color: var(--accent-cyan);
-        }
-
-        button {
-            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
-            border: none;
-            color: #fff;
-            padding: 8px 20px;
-            font-family: var(--font-sans);
-            font-size: 13px;
-            font-weight: 600;
-            cursor: pointer;
-            border-radius: var(--radius-sm);
-            text-transform: uppercase;
-            transition: all 0.2s;
-            box-shadow: 0 0 15px var(--accent-cyan-glow);
-        }
-
-        button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 0 20px var(--accent-cyan-glow);
-        }
-
-        .global-stats {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 16px;
-            margin-bottom: 30px;
-        }
-
-        .stat-box {
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            padding: 20px;
-            border-radius: var(--radius-lg);
-            backdrop-filter: blur(16px);
-            text-align: center;
-        }
-
-        .stat-label {
-            color: var(--text-muted);
-            font-size: 13px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 8px;
-        }
-
-        .stat-value {
-            font-size: 32px;
-            font-weight: 800;
-            font-family: var(--font-mono);
-            color: var(--accent-cyan);
-        }
-
-        .grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 24px;
-        }
-
-        .node-panel {
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            border-radius: var(--radius-lg);
+            height: 100vh;
             overflow: hidden;
-            backdrop-filter: blur(16px);
-        }
-
-        .node-header {
-            background: rgba(0,0,0,0.2);
-            padding: 16px 20px;
-            border-bottom: 1px solid var(--border-color);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .node-title {
-            font-weight: 800;
-            color: #fff;
-            font-size: 16px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-family: var(--font-sans);
-        }
-
-        .status-dot {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            background: var(--text-dim);
-        }
-
-        .status-dot.active {
-            background: var(--accent-green);
-            box-shadow: 0 0 10px var(--accent-green);
-        }
-        
-        .status-dot.error {
-            background: var(--accent-rose);
-            box-shadow: 0 0 12px var(--accent-rose);
-            animation: pulse-red 1s infinite alternate;
-        }
-
-        @keyframes pulse-red {
-            from { opacity: 0.5; }
-            to { opacity: 1; }
-        }
-
-        .node-content {
-            padding: 24px;
-        }
-
-        .node-summary {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 15px;
-            margin-bottom: 24px;
-        }
-
-        .node-metric {
-            background: rgba(0,0,0,0.2);
-            padding: 12px;
-            border: 1px solid var(--border-color);
-            border-radius: var(--radius-md);
-        }
-
-        .node-metric-label {
-            color: var(--text-muted);
-            font-size: 11px;
-            font-weight: 600;
-            text-transform: uppercase;
-            margin-bottom: 5px;
-        }
-
-        .node-metric-value {
-            font-size: 20px;
-            font-weight: 800;
-            font-family: var(--font-mono);
-            color: #fff;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
-        th {
-            text-align: left;
-            padding: 12px 10px;
-            font-size: 12px;
-            font-weight: 600;
-            color: var(--text-muted);
-            border-bottom: 1px solid var(--border-color);
-        }
-
-        td {
-            padding: 12px 10px;
-            border-bottom: 1px solid rgba(255,255,255,0.04);
-            font-family: var(--font-mono);
             font-size: 13px;
         }
 
+        /* AUTH OVERLAY */
+        #auth-overlay {
+            position: fixed; top:0; left:0; right:0; bottom:0;
+            background: rgba(3,5,12,0.96);
+            display: flex; justify-content: center; align-items: center;
+            z-index: 9999; backdrop-filter: blur(20px);
+        }
+        .auth-box {
+            background: var(--bg-card); border:1px solid var(--border-color);
+            padding: 36px; border-radius: var(--radius-lg); width: 100%; max-width: 380px;
+            text-align: center; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.7);
+        }
+        .auth-box h2 { font-size:20px; font-weight:800; margin-bottom: 24px; color:var(--accent-cyan); }
+        .auth-box input {
+            width:100%; background:rgba(0,0,0,0.5); border:1px solid var(--border-color);
+            color:var(--text-main); padding:12px 16px; border-radius:var(--radius-sm);
+            margin-bottom:14px; font-family:var(--font-mono); font-size:13px; outline:none;
+        }
+        .auth-box button {
+            width:100%; padding:12px; background:linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+            border:none; color:#fff; font-weight:700; border-radius:var(--radius-sm); cursor:pointer;
+        }
+
+        /* SIDEBAR */
+        .sidebar {
+            width: 260px;
+            background: var(--bg-sidebar);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+            user-select: none;
+        }
+        .sidebar-brand {
+            padding: 24px 20px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .brand-icon {
+            width: 14px; height: 14px; background: var(--accent-cyan);
+            border-radius: 4px; box-shadow: 0 0 12px var(--accent-cyan);
+        }
+        .brand-text { font-size: 16px; font-weight: 800; letter-spacing: -0.5px; }
+
+        .sidebar-nav {
+            padding: 16px 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            flex: 1;
+            overflow-y: auto;
+        }
+        .nav-label {
+            font-size: 10px; font-weight: 700; color: var(--text-dim);
+            text-transform: uppercase; letter-spacing: 0.8px; padding: 10px 8px 4px 8px;
+        }
+        .nav-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 12px;
+            border-radius: var(--radius-sm);
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.15s;
+            font-weight: 600;
+        }
+        .nav-item:hover { background: rgba(255,255,255,0.04); color: var(--text-main); }
+        .nav-item.active {
+            background: rgba(6, 182, 212, 0.12);
+            color: var(--accent-cyan);
+            border: 1px solid rgba(6, 182, 212, 0.25);
+        }
+        .nav-badge {
+            font-size: 10px; font-family: var(--font-mono); font-weight: 700;
+            padding: 2px 6px; border-radius: 4px; background: rgba(255,255,255,0.06);
+        }
+        .nav-item.active .nav-badge { background: rgba(6, 182, 212, 0.2); color: var(--accent-cyan); }
+
+        .sidebar-footer {
+            padding: 16px;
+            border-top: 1px solid var(--border-color);
+            font-size: 11px;
+            color: var(--text-dim);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        /* MAIN CONTENT AREA */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            background-image:
+                radial-gradient(at 0% 0%, rgba(6,182,212,0.08) 0px, transparent 40%),
+                radial-gradient(at 100% 0%, rgba(139,92,246,0.08) 0px, transparent 40%),
+                radial-gradient(at 50% 100%, rgba(16,185,129,0.05) 0px, transparent 40%);
+            padding: 24px;
+        }
+
+        /* TOP BAR */
+        .top-bar {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 20px; flex-wrap: wrap; gap: 12px;
+        }
+        .view-title { font-size: 20px; font-weight: 800; display: flex; align-items: center; gap: 10px; }
+        .refresh-btn {
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+            border:none; color:#fff; padding:8px 16px; font-size:12px; font-weight:700;
+            cursor:pointer; border-radius: var(--radius-sm); text-transform:uppercase;
+            transition: 0.2s; box-shadow: 0 0 12px var(--accent-cyan-glow);
+        }
+        .refresh-btn:hover { transform: translateY(-1px); }
+
+        /* BTC CHART CARD */
+        .btc-card {
+            background: var(--bg-card); border:1px solid var(--border-color);
+            border-radius: var(--radius-lg); padding: 16px 20px; margin-bottom: 20px;
+        }
+        .btc-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+        .btc-price { font-family: var(--font-mono); font-size: 20px; font-weight: 800; color: var(--accent-amber); }
+        .btc-change { font-family: var(--font-mono); font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 12px; }
+        #btc-chart { width: 100%; height: 150px; border-radius: var(--radius-md); overflow: hidden; }
+
+        /* KPI METRICS */
+        .stats-grid {
+            display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px;
+        }
+        @media(max-width: 900px) { .stats-grid { grid-template-columns: repeat(2, 1fr); } }
+        .stat-card {
+            background: var(--bg-card); border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg); padding: 16px; text-align: center;
+        }
+        .stat-label { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 6px; }
+        .stat-value { font-size: 24px; font-weight: 800; font-family: var(--font-mono); color: var(--accent-cyan); }
+        .stat-sub { font-size: 11px; font-family: var(--font-mono); margin-top: 4px; color: var(--text-dim); }
+
+        /* GRANJA SECTIONS */
+        .granja-block { margin-bottom: 30px; }
+        .granja-block.hidden { display: none; }
+        .granja-header {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 10px 14px; background: rgba(255,255,255,0.02);
+            border: 1px solid var(--border-color); border-radius: var(--radius-md);
+            margin-bottom: 14px; border-left: 4px solid var(--accent-cyan);
+        }
+        .granja-name { font-size: 14px; font-weight: 800; text-transform: uppercase; }
+        .granja-cap { font-family: var(--font-mono); font-size: 12px; font-weight: 700; color: var(--accent-cyan); }
+
+        /* NODES GRID */
+        .nodes-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+            gap: 16px;
+        }
+        @media(max-width: 960px) { .nodes-grid { grid-template-columns: 1fr; } }
+
+        .node-card {
+            background: var(--bg-card); border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg); overflow: hidden; display: flex; flex-direction: column;
+        }
+        .node-card-header {
+            background: rgba(0,0,0,0.3); padding: 12px 16px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .node-name-wrap { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 13px; }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-dim); }
+        .status-dot.active { background: var(--accent-green); box-shadow: 0 0 8px var(--accent-green); }
+        .status-dot.waiting { background: var(--text-dim); }
+        .status-dot.error { background: var(--accent-rose); box-shadow: 0 0 8px var(--accent-rose); }
+        .node-link { color: inherit; text-decoration: none; border-bottom: 1px dashed rgba(255,255,255,0.25); }
+
+        .node-metrics-bar {
+            display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
+            background: rgba(0,0,0,0.2); padding: 10px; margin: 12px 14px 10px 14px;
+            border-radius: var(--radius-md); text-align: center;
+        }
+        .nm-label { font-size: 9px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 2px; }
+        .nm-val { font-size: 13px; font-weight: 800; font-family: var(--font-mono); }
+
+        .tabs-bar { display: flex; gap: 6px; padding: 0 14px 10px 14px; border-bottom: 1px solid var(--border-color); }
+        .tab-btn {
+            background: none; border: none; color: var(--text-muted); padding: 4px 10px;
+            font-size: 11px; font-weight: 700; border-radius: var(--radius-sm); cursor: pointer;
+        }
+        .tab-btn.active { background: rgba(255,255,255,0.08); color: var(--text-main); }
+
+        .tab-content { padding: 12px 14px; flex: 1; max-height: 240px; overflow-y: auto; }
+        table { width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: 11px; }
+        th { text-align: left; color: var(--text-muted); padding: 6px 8px; font-size: 9px; text-transform: uppercase; border-bottom: 1px solid var(--border-color); }
+        td { padding: 6px 8px; border-bottom: 1px solid rgba(255,255,255,0.03); }
         .val-green { color: var(--accent-green); font-weight: 700; }
         .val-red { color: var(--accent-rose); font-weight: 700; }
-
-        .badge-trail {
-            background: rgba(139, 92, 246, 0.2);
-            color: #c084fc;
-            padding: 4px 8px;
-            border-radius: 6px;
-            font-size: 11px;
-            font-weight: 700;
+        .badge-trail { background: rgba(139,92,246,0.2); color: #c084fc; padding: 2px 6px; border-radius: 4px; font-size: 9px; }
+        .badge-win { background: rgba(16,185,129,0.15); color: #34d399; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 700; }
+        .badge-loss { background: rgba(244,63,94,0.15); color: #fb7185; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 700; }
+        .close-btn {
+            background: rgba(244,63,94,0.15); border: 1px solid rgba(244,63,94,0.3); color: #fb7185;
+            padding: 2px 6px; font-size: 9px; font-weight: 700; border-radius: 4px; cursor: pointer;
         }
 
-        #auth-overlay {
-            position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(3,5,12,0.95);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-            backdrop-filter: blur(10px);
+        /* VISTA BÓVEDA CENTRAL */
+        #boveda-view { display: none; margin-top: 10px; }
+        .boveda-hero {
+            background: linear-gradient(135deg, rgba(6,182,212,0.12), rgba(139,92,246,0.12));
+            border: 1px solid var(--border-color); border-radius: var(--radius-lg);
+            padding: 24px; margin-bottom: 24px; backdrop-filter: blur(16px);
         }
-
-        .auth-box {
-            background: var(--bg-card);
-            border: 1px solid var(--accent-cyan);
-            padding: 40px;
-            border-radius: var(--radius-lg);
-            width: 320px;
-            box-shadow: 0 0 30px var(--accent-cyan-glow);
-            text-align: center;
+        .boveda-goal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+        .boveda-goal-title { font-size: 18px; font-weight: 800; display: flex; align-items: center; gap: 10px; }
+        .progress-bar-bg { width: 100%; height: 16px; background: rgba(0,0,0,0.5); border-radius: 8px; overflow: hidden; border: 1px solid var(--border-color); }
+        .progress-bar-fill { height: 100%; background: linear-gradient(90deg, var(--accent-cyan), var(--accent-green)); width: 0%; transition: width 0.5s; }
+        
+        .boveda-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
+        @media(max-width: 900px) { .boveda-grid { grid-template-columns: 1fr; } }
+        .boveda-card {
+            background: var(--bg-card); border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg); padding: 20px; position: relative; overflow: hidden;
         }
-
-        .auth-box input {
-            width: 100%;
-            box-sizing: border-box;
-            margin-bottom: 16px;
-            padding: 12px;
-        }
-
-        .auth-box button {
-            width: 100%;
-            padding: 14px;
-            font-size: 14px;
-        }
+        .boveda-card-title { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 8px; }
+        .boveda-card-val { font-size: 26px; font-weight: 800; font-family: var(--font-mono); }
+        .boveda-card-desc { font-size: 11px; color: var(--text-dim); margin-top: 8px; line-height: 1.4; }
     </style>
 </head>
 <body>
 
     <div id="auth-overlay">
         <div class="auth-box">
-            <h2 style="margin-top:0; color:var(--neon-blue); text-align:center;">SECURE FLEET LINK</h2>
-            <input type="text" id="auth-user" placeholder="Username" value="admin">
+            <h2>⚡ FLEET COMMAND</h2>
+            <input type="text" id="auth-user" placeholder="Usuario" value="admin">
             <input type="password" id="auth-pass" placeholder="Password" value="cripto2026">
-            <button onclick="initializeFleet()">AUTHORIZE ACCESS</button>
+            <button onclick="initializeFleet()">AUTORIZAR ACCESO</button>
         </div>
     </div>
 
-    <div class="header">
-        <div class="title">MAESTRO <span>//</span> FLEET COMMAND</div>
-        <div class="controls">
-            <span>NODE A URL:</span>
-            <input type="text" id="node-a-url" value="http://localhost:5000">
-            <span style="margin-left:15px;">NODE B URL:</span>
-            <input type="text" id="node-b-url" value="http://localhost:5001">
-            <button onclick="forceRefresh()" style="margin-left:15px;">REFRESH</button>
+    <!-- SIDEBAR NAV -->
+    <div class="sidebar">
+        <div class="sidebar-brand">
+            <div class="brand-icon"></div>
+            <div class="brand-text">FLEET COMMAND</div>
+        </div>
+        <div class="sidebar-nav">
+            <div class="nav-label">Vistas Generales</div>
+            <div class="nav-item active" onclick="switchView('all')" id="nav-all">
+                <span>🌐 Vista Completa (Flota)</span>
+                <span class="nav-badge" id="badge-all">3 / 8</span>
+            </div>
+            <div class="nav-item" onclick="switchView('boveda')" id="nav-boveda">
+                <span>🏦 Bóveda Central (Retiros)</span>
+                <span class="nav-badge" style="background:rgba(16,185,129,0.2);color:var(--accent-green);" id="badge-boveda">70/20/10</span>
+            </div>
+
+            <div class="nav-label">Por Granjas (Binance)</div>
+            <div class="nav-item" onclick="switchView('g1')" id="nav-g1">
+                <span>🚜 Granja 1 ($2.5k)</span>
+                <span class="nav-badge" id="badge-g1">1 Nodo</span>
+            </div>
+            <div class="nav-item" onclick="switchView('g2')" id="nav-g2">
+                <span>🚜 Granja 2 ($5.0k)</span>
+                <span class="nav-badge" id="badge-g2">2 Nodos</span>
+            </div>
+            <div class="nav-item" onclick="switchView('g3')" id="nav-g3">
+                <span>🚜 Granja 3 ($5.0k)</span>
+                <span class="nav-badge" id="badge-g3">2 Nodos</span>
+            </div>
+            <div class="nav-item" onclick="switchView('g4')" id="nav-g4">
+                <span>🚜 Granja 4 ($7.5k)</span>
+                <span class="nav-badge" id="badge-g4">3 Nodos</span>
+            </div>
+        </div>
+        <div class="sidebar-footer">
+            <span>Capital Total: $20,000</span>
+            <span style="color:var(--accent-green);">80 Slots</span>
         </div>
     </div>
 
-    <div class="global-stats">
-        <div class="stat-box">
-            <div class="stat-label">TOTAL FLEET EQUITY (USDT)</div>
-            <div class="stat-value" id="global-equity">--</div>
+    <!-- MAIN DASHBOARD CONTENT -->
+    <div class="main-content">
+        <div class="top-bar">
+            <div class="view-title" id="current-view-title">🌐 Vista Completa · Todas las Granjas</div>
+            <button class="refresh-btn" onclick="forceRefresh()">↺ Actualizar Todo</button>
         </div>
-        <div class="stat-box">
-            <div class="stat-label">COMBINED FREE USDT</div>
-            <div class="stat-value" id="global-free" style="color:#fff;">--</div>
-        </div>
-        <div class="stat-box">
-            <div class="stat-label">GLOBAL ACTIVE SLOTS</div>
-            <div class="stat-value" id="global-slots" style="color:var(--neon-blue);">-- / 20</div>
-        </div>
-    </div>
 
-    <div class="grid">
-        <!-- NODE A -->
-        <div class="node-panel">
-            <div class="node-header">
-                <div class="node-title">
-                    <div class="status-dot" id="node-a-dot"></div>
-                    NODE A [ TOP 1-50 ]
+        <!-- BTC CHART -->
+        <div class="btc-card" id="btc-card-block">
+            <div class="btc-header">
+                <div style="font-weight:700; display:flex; align-items:center; gap:8px;">
+                    <span style="color:var(--accent-amber);">₿</span> Bitcoin 1 Mes (30 Velas Diarias)
                 </div>
-                <div style="font-size: 10px; color: var(--text-muted);" id="node-a-last">Awaiting link...</div>
+                <div style="display:flex; align-items:center; gap:12px;">
+                    <div class="btc-price" id="btc-price">$--</div>
+                    <div class="btc-change" id="btc-change">--</div>
+                </div>
             </div>
-            <div class="node-content">
-                <div class="node-summary">
-                    <div class="node-metric">
-                        <div class="node-metric-label">TOTAL EQUITY</div>
-                        <div class="node-metric-value" id="node-a-equity">--</div>
-                    </div>
-                    <div class="node-metric">
-                        <div class="node-metric-label">STATUS</div>
-                        <div class="node-metric-value" id="node-a-status" style="color:var(--neon-green);">--</div>
-                    </div>
-                </div>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>ASSET</th>
-                            <th>ENTRY</th>
-                            <th>CURRENT</th>
-                            <th>PNL %</th>
-                            <th>TRAIL</th>
-                        </tr>
-                    </thead>
-                    <tbody id="node-a-positions">
-                        <tr><td colspan="5" style="text-align:center; color:var(--text-muted);">No active data</td></tr>
-                    </tbody>
-                </table>
+            <div id="btc-chart"></div>
+        </div>
+
+        <!-- STATS BAR -->
+        <div class="stats-grid" id="stats-bar-block">
+            <div class="stat-card">
+                <div class="stat-label">Total Fleet Equity</div>
+                <div class="stat-value" id="global-equity">--</div>
+                <div class="stat-sub" id="global-equity-sub">3 Nodos Activos ($7,500)</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">P&L Neto Flota</div>
+                <div class="stat-value" id="global-pnl" style="color:var(--accent-green);">--</div>
+                <div class="stat-sub" id="global-pnl-pct">--</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Slots Operando</div>
+                <div class="stat-value" id="global-slots" style="color:var(--accent-purple);">-- / 80</div>
+                <div class="stat-sub" id="global-slots-sub">30 de 80 slots en monitoreo</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Rendimiento Diario</div>
+                <div class="stat-value" id="global-daily-avg" style="color:var(--accent-amber);">--</div>
+                <div class="stat-sub" id="global-days">Día 1 · En vivo</div>
             </div>
         </div>
 
-        <!-- NODE B -->
-        <div class="node-panel">
-            <div class="node-header">
-                <div class="node-title">
-                    <div class="status-dot" id="node-b-dot"></div>
-                    NODE B [ TOP 51-100 ]
+        <!-- GRANJAS DISPLAY -->
+        <div id="granjas-wrapper"></div>
+
+        <!-- BÓVEDA CENTRAL VIEW -->
+        <div id="boveda-view">
+            <div class="boveda-hero">
+                <div class="boveda-goal-header">
+                    <div class="boveda-goal-title">🎯 Objetivo de Retiro Mensual: $5,000.00 USD / mes</div>
+                    <div style="font-family:var(--font-mono); font-weight:800; font-size:16px; color:var(--accent-green);" id="boveda-progress-pct">0.0% logrado</div>
                 </div>
-                <div style="font-size: 10px; color: var(--text-muted);" id="node-b-last">Awaiting link...</div>
+                <div class="progress-bar-bg">
+                    <div class="progress-bar-fill" id="boveda-progress-bar"></div>
+                </div>
+                <div style="font-size:11px; color:var(--text-muted); margin-top:10px; font-family:var(--font-mono);" id="boveda-progress-sub">
+                    Capital de Ganancia Acumulado para Retiro Directo (10% Bóveda + Kickbacks de Referidos)
+                </div>
             </div>
-            <div class="node-content">
-                <div class="node-summary">
-                    <div class="node-metric">
-                        <div class="node-metric-label">TOTAL EQUITY</div>
-                        <div class="node-metric-value" id="node-b-equity">--</div>
-                    </div>
-                    <div class="node-metric">
-                        <div class="node-metric-label">STATUS</div>
-                        <div class="node-metric-value" id="node-b-status" style="color:var(--neon-green);">--</div>
+
+            <div class="boveda-grid">
+                <div class="boveda-card" style="border-top:3px solid var(--accent-green);">
+                    <div class="boveda-card-title">💵 Bóveda de Retiro Directo (10%)</div>
+                    <div class="boveda-card-val" style="color:var(--accent-green);" id="boveda-10-val">$0.00</div>
+                    <div class="boveda-card-desc">
+                        Ganancia neta asignada al retiro mensual. Disponible para enviar a Lemon Cash / Cocos Capital.
                     </div>
                 </div>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>ASSET</th>
-                            <th>ENTRY</th>
-                            <th>CURRENT</th>
-                            <th>PNL %</th>
-                            <th>TRAIL</th>
-                        </tr>
-                    </thead>
-                    <tbody id="node-b-positions">
-                        <tr><td colspan="5" style="text-align:center; color:var(--text-muted);">No active data</td></tr>
-                    </tbody>
-                </table>
+                <div class="boveda-card" style="border-top:3px solid var(--accent-amber);">
+                    <div class="boveda-card-title">🛡️ Fondo de Reserva / Buffer (20%)</div>
+                    <div class="boveda-card-val" style="color:var(--accent-amber);" id="boveda-20-val">$0.00</div>
+                    <div class="boveda-card-desc">
+                        Colchón de seguridad para absorber drawdowns sin achicar el capital operativo de los nodos.
+                    </div>
+                </div>
+                <div class="boveda-card" style="border-top:3px solid var(--accent-purple);">
+                    <div class="boveda-card-title">📈 Capital Re-invertido (70%)</div>
+                    <div class="boveda-card-val" style="color:var(--accent-purple);" id="boveda-70-val">$0.00</div>
+                    <div class="boveda-card-desc">
+                        Ganancias compuestas inyectadas de vuelta en los nodos para escalar de $20k a mayor tamaño.
+                    </div>
+                </div>
+            </div>
+
+            <div class="boveda-grid" style="grid-template-columns: 1fr 1fr;">
+                <div class="boveda-card" style="border-top:3px solid var(--accent-cyan);">
+                    <div class="boveda-card-title">🎁 Bóveda Madre · Kickbacks de Referidos (Binance)</div>
+                    <div class="boveda-card-val" style="color:var(--accent-cyan);" id="boveda-kickback-val">$0.00</div>
+                    <div class="boveda-card-desc">
+                        Comisiones recuperadas en BNB por la Bóveda Madre (20% del fee de las 4 Granjas por Alta Frecuencia).
+                    </div>
+                </div>
+                <div class="boveda-card" style="border-top:3px solid #f8fafc;">
+                    <div class="boveda-card-title">🏛️ Circuito Fiscal & Bancario</div>
+                    <div class="boveda-card-desc" style="font-size:12px; color:var(--text-main); margin-top:4px;">
+                        • **Paso 1:** Binance Granja ➔ Retiro USDT a Lemon Cash del titular.<br>
+                        • **Paso 2:** Venta de USDT a ARS dentro de Lemon Cash.<br>
+                        • **Paso 3:** Transferencia nativa ARS a Banco / Broker Cocos Capital.
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
     <script>
-        let authHeader = "";
-        let refreshTimer = null;
-        
-        let globalData = {
-            a: { equity: 0, free: 0, slots: 0, connected: false },
-            b: { equity: 0, free: 0, slots: 0, connected: false }
-        };
+        const FLEET = [
+            {
+                id: 'g1',
+                name: 'Granja 1',
+                title: '🚜 GRANJA 1 · $2,500 USD (Cuenta Binance 1)',
+                nodes: [
+                    { id: '1', name: 'NODO 1', tag: 'TOP 1-50 · Conservador DCA', url: 'https://nodo1-gxra.onrender.com', cap: 2500 }
+                ]
+            },
+            {
+                id: 'g2',
+                name: 'Granja 2',
+                title: '🚜 GRANJA 2 · $5,000 USD (Cuenta Binance 2)',
+                nodes: [
+                    { id: '2', name: 'NODO 2', tag: 'TOP 1-50 · Conservador DCA', url: 'https://nodo2-0slw.onrender.com', cap: 2500 },
+                    { id: '3', name: 'NODO 3', tag: 'TOP 51-100 · Agresivo All-In', url: 'https://nodo3.onrender.com', cap: 2500 }
+                ]
+            },
+            {
+                id: 'g3',
+                name: 'Granja 3',
+                title: '🚜 GRANJA 3 · $5,000 USD (Cuenta Binance 3)',
+                nodes: [
+                    { id: '4', name: 'NODO 4', tag: 'TOP 51-100 · Agresivo All-In', url: '', cap: 2500 },
+                    { id: '5', name: 'NODO 5', tag: 'TOP 25-75 · Rebotes Rápidos', url: '', cap: 2500 }
+                ]
+            },
+            {
+                id: 'g4',
+                name: 'Granja 4',
+                title: '🚜 GRANJA 4 · $7,500 USD (Cuenta Binance 4)',
+                nodes: [
+                    { id: '6', name: 'NODO 6', tag: 'TOP 1-50 · Conservador DCA', url: '', cap: 2500 },
+                    { id: '7', name: 'NODO 7', tag: 'TOP 51-100 · Agresivo All-In', url: '', cap: 2500 },
+                    { id: '8', name: 'NODO 8', tag: 'TOP 25-75 · Rebotes Rápidos', url: '', cap: 2500 }
+                ]
+            }
+        ];
+
+        const ALL_NODES = [];
+        FLEET.forEach(g => g.nodes.forEach(n => { n.granjaId = g.id; ALL_NODES.push(n); }));
+
+        let authHeader = '';
+        let currentFilter = 'all';
+        let nodeData = {};
+
+        ALL_NODES.forEach(n => {
+            nodeData[n.id] = { equity: n.cap, pnl: 0, slots: 0, connected: false, oldestTrade: null, cap: n.cap, rawData: null };
+        });
+
+        function renderStructure() {
+            const wrapper = document.getElementById('granjas-wrapper');
+            wrapper.innerHTML = FLEET.map(g => `
+                <div class="granja-block" id="block-${g.id}">
+                    <div class="granja-header">
+                        <div class="granja-name">${g.title}</div>
+                        <div class="granja-cap" id="cap-summary-${g.id}">Capital: $${g.nodes.reduce((a,b)=>a+b.cap,0).toLocaleString()} USD</div>
+                    </div>
+                    <div class="nodes-grid">
+                        ${g.nodes.map(n => `
+                            <div class="node-card" id="card-${n.id}">
+                                <div class="node-card-header">
+                                    <div class="node-name-wrap">
+                                        <div class="status-dot ${n.url ? 'active' : 'waiting'}" id="dot-${n.id}"></div>
+                                        ${n.url ? `<a href="${n.url}" target="_blank" class="node-link">${n.name} · <span style="color:var(--text-muted);font-size:11px;">${n.tag}</span> ↗</a>` : `<span>${n.name} · <span style="color:var(--text-muted);font-size:11px;">${n.tag}</span></span>`}
+                                    </div>
+                                    <div style="font-size:10px; font-family:var(--font-mono); color:var(--text-dim);" id="time-${n.id}">
+                                        ${n.url ? 'Conectando...' : 'Esperando URL'}
+                                    </div>
+                                </div>
+                                <div class="node-metrics-bar">
+                                    <div><div class="nm-label">Equity</div><div class="nm-val" id="eq-${n.id}">$${n.cap.toLocaleString()}</div></div>
+                                    <div><div class="nm-label">P&L Neto</div><div class="nm-val" id="pnl-${n.id}">$0.00</div></div>
+                                    <div><div class="nm-label">Win Rate</div><div class="nm-val" id="wr-${n.id}">--</div></div>
+                                    <div><div class="nm-label">BTC Guard</div><div class="nm-val" id="guard-${n.id}" style="color:var(--accent-green);">--</div></div>
+                                </div>
+                                <div class="tabs-bar">
+                                    <button class="tab-btn active" id="tab-btn-pos-${n.id}" onclick="toggleTab('${n.id}','pos')">Posiciones</button>
+                                    <button class="tab-btn" id="tab-btn-hist-${n.id}" onclick="toggleTab('${n.id}','hist')">Historial</button>
+                                </div>
+                                <div class="tab-content">
+                                    <div id="panel-pos-${n.id}">
+                                        <table>
+                                            <thead><tr><th>Asset</th><th>Entrada</th><th>Actual</th><th>P&L</th><th>Trail</th><th></th></tr></thead>
+                                            <tbody id="body-pos-${n.id}"><tr><td colspan="6" style="text-align:center;color:var(--text-dim);">${n.url ? 'Cargando slots...' : 'Nodo no configurado'}</td></tr></tbody>
+                                        </table>
+                                    </div>
+                                    <div id="panel-hist-${n.id}" style="display:none;">
+                                        <table>
+                                            <thead><tr><th>Hora</th><th>Asset</th><th>P&L %</th><th>P&L USD</th><th>Res</th></tr></thead>
+                                            <tbody id="body-hist-${n.id}"><tr><td colspan="5" style="text-align:center;color:var(--text-dim);">Sin trades cerrados</td></tr></tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function switchView(viewId) {
+            currentFilter = viewId;
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+            document.getElementById('nav-' + viewId).classList.add('active');
+
+            const titleEl = document.getElementById('current-view-title');
+            const bovedaView = document.getElementById('boveda-view');
+            const granjasWrapper = document.getElementById('granjas-wrapper');
+
+            if (viewId === 'boveda') {
+                titleEl.innerText = '🏦 Bóveda Central · Control de Retiros & Referidos';
+                bovedaView.style.display = 'block';
+                granjasWrapper.style.display = 'none';
+            } else {
+                bovedaView.style.display = 'none';
+                granjasWrapper.style.display = 'block';
+
+                if (viewId === 'all') {
+                    titleEl.innerText = '🌐 Vista Completa · Todas las Granjas';
+                    FLEET.forEach(g => document.getElementById('block-' + g.id).classList.remove('hidden'));
+                } else {
+                    const target = FLEET.find(g => g.id === viewId);
+                    titleEl.innerText = target ? target.title : 'Granja';
+                    FLEET.forEach(g => {
+                        const el = document.getElementById('block-' + g.id);
+                        if (g.id === viewId) el.classList.remove('hidden');
+                        else el.classList.add('hidden');
+                    });
+                }
+            }
+        }
+
+        function toggleTab(nodeId, tab) {
+            const pPos = document.getElementById('panel-pos-' + nodeId);
+            const pHist = document.getElementById('panel-hist-' + nodeId);
+            const bPos = document.getElementById('tab-btn-pos-' + nodeId);
+            const bHist = document.getElementById('tab-btn-hist-' + nodeId);
+            if (tab === 'pos') {
+                pPos.style.display = ''; pHist.style.display = 'none';
+                bPos.classList.add('active'); bHist.classList.remove('active');
+            } else {
+                pPos.style.display = 'none'; pHist.style.display = '';
+                bPos.classList.remove('active'); bHist.classList.add('active');
+            }
+        }
 
         function initializeFleet() {
-            const user = document.getElementById("auth-user").value;
-            const pass = document.getElementById("auth-pass").value;
-            authHeader = "Basic " + btoa(user + ":" + pass);
-            
-            document.getElementById("auth-overlay").style.display = "none";
+            const user = document.getElementById('auth-user').value;
+            const pass = document.getElementById('auth-pass').value;
+            authHeader = 'Basic ' + btoa(user + ':' + pass);
+            document.getElementById('auth-overlay').style.display = 'none';
+            renderStructure();
+            initBtcChart();
             forceRefresh();
-            refreshTimer = setInterval(forceRefresh, 5000);
+            setInterval(forceRefresh, 8000);
         }
 
         async function forceRefresh() {
-            const urlA = document.getElementById("node-a-url").value;
-            const urlB = document.getElementById("node-b-url").value;
-
-            fetchNode(urlA, 'a');
-            fetchNode(urlB, 'b');
+            for (const n of ALL_NODES) {
+                if (n.url) fetchNode(n);
+            }
         }
 
-        async function fetchNode(baseUrl, nodeId) {
-            const dot = document.getElementById(`node-${nodeId}-dot`);
-            const timeLabel = document.getElementById(`node-${nodeId}-last`);
-            
+        async function fetchNode(node) {
+            const dot = document.getElementById('dot-' + node.id);
+            const timeLabel = document.getElementById('time-' + node.id);
             try {
-                const response = await fetch(`${baseUrl}/cripto_bot_estado.json`, {
+                const res = await fetch(node.url.replace(/\/$/, '') + '/cripto_bot_estado.json', {
                     headers: { 'Authorization': authHeader }
                 });
-                
-                if (response.ok) {
-                    const data = await response.json();
-                    renderNodeData(nodeId, data);
-                    dot.className = "status-dot active";
-                    timeLabel.innerText = "LINK ESTABLISHED";
-                    timeLabel.style.color = "var(--neon-green)";
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const data = await res.json();
+
+                const lastRun = data.lastRun || '';
+                let ageSec = 9999;
+                if (lastRun) {
+                    const lastDt = new Date(lastRun.replace(' ', 'T') + 'Z');
+                    ageSec = Math.floor((Date.now() - lastDt.getTime()) / 1000);
+                }
+
+                if (ageSec > 300) {
+                    if (dot) { dot.className = 'status-dot error'; }
+                    if (timeLabel) { timeLabel.innerText = 'Inactivo (' + Math.floor(ageSec/60) + 'm)'; timeLabel.style.color = 'var(--accent-rose)'; }
                 } else {
-                    throw new Error("HTTP " + response.status);
+                    if (dot) { dot.className = 'status-dot active'; }
+                    if (timeLabel) { timeLabel.innerText = 'LIVE ' + (lastRun ? lastRun.split(' ')[1] : ''); timeLabel.style.color = 'var(--accent-green)'; }
                 }
-            } catch (err) {
-                dot.className = "status-dot error";
-                timeLabel.innerText = "LINK FAILED: " + err.message;
-                timeLabel.style.color = "var(--neon-red)";
-                globalData[nodeId].connected = false;
-                updateGlobalStats();
+
+                populateNode(node, data);
+            } catch(e) {
+                if (dot) dot.className = 'status-dot error';
+                if (timeLabel) { timeLabel.innerText = 'Offline'; timeLabel.style.color = 'var(--accent-rose)'; }
+                nodeData[node.id].connected = false;
+                updateTotals();
             }
         }
 
-        function formatUSD(num) {
-            return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(num);
-        }
+        function populateNode(node, data) {
+            const eq = data.totalEquityUsd || node.cap;
+            const pnl = data.netPnlUsd || 0;
+            const wins = data.totalWins || 0;
+            const losses = data.totalLosses || 0;
+            const wr = data.winRate || 0;
+            const slots = (data.active_slots || []).length;
+            const trades = data.trade_history || [];
 
-        function renderNodeData(nodeId, data) {
-            globalData[nodeId].equity = data.totalEquityUsd || data.grossAssetsUsd || 0;
-            globalData[nodeId].free = data.operating_capital_usd || 0; // Aproximación
-            globalData[nodeId].slots = data.active_slots ? data.active_slots.length : 0;
-            globalData[nodeId].connected = true;
+            nodeData[node.id] = {
+                equity: eq, pnl: pnl, slots: slots, connected: true,
+                oldestTrade: trades.length > 0 ? trades[trades.length-1].timestamp : null,
+                cap: node.cap, rawData: data
+            };
 
-            document.getElementById(`node-${nodeId}-equity`).innerText = formatUSD(globalData[nodeId].equity);
-            
-            let statusText = "NORMAL";
-            if(data.btcGuard && data.btcGuard.status !== "NORMAL") {
-                statusText = data.btcGuard.status;
+            const eqEl = document.getElementById('eq-' + node.id);
+            if (eqEl) eqEl.innerText = '$' + eq.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+
+            const pnlEl = document.getElementById('pnl-' + node.id);
+            if (pnlEl) {
+                pnlEl.innerText = (pnl >= 0 ? '+' : '') + '$' + pnl.toFixed(2);
+                pnlEl.style.color = pnl >= 0 ? 'var(--accent-green)' : 'var(--accent-rose)';
             }
-            document.getElementById(`node-${nodeId}-status`).innerText = statusText;
-            
-            if (statusText !== "NORMAL") {
-                document.getElementById(`node-${nodeId}-status`).style.color = "var(--accent-rose)";
-            } else {
-                document.getElementById(`node-${nodeId}-status`).style.color = "var(--accent-green)";
+
+            const wrEl = document.getElementById('wr-' + node.id);
+            if (wrEl) wrEl.innerText = wr + '% (' + wins + '/' + losses + ')';
+
+            const guardEl = document.getElementById('guard-' + node.id);
+            if (guardEl) {
+                const btcStatus = (data.btcGuard || {}).status || 'NORMAL';
+                guardEl.innerText = btcStatus;
+                guardEl.style.color = btcStatus === 'NORMAL' ? 'var(--accent-green)' : 'var(--accent-rose)';
             }
 
-            const tbody = document.getElementById(`node-${nodeId}-positions`);
-            tbody.innerHTML = "";
-
-            if (globalData[nodeId].slots === 0) {
-                tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:var(--text-muted);">No active positions</td></tr>`;
-            } else {
-                for (const pos of data.active_slots) {
-                    const pnlClass = pos.pnl_pct >= 0 ? 'val-green' : 'val-red';
-                    const pnlSign = pos.pnl_pct >= 0 ? '+' : '';
-                    const symbol = pos.ticker || pos.symbol;
-                    
-                    let trailText = `<span class="badge-trail">Stage ${pos.trailing_stage || 0}</span>`;
-
-                    const row = `
-                        <tr>
-                            <td style="font-weight:700;">${symbol}</td>
-                            <td>${pos.entry_price.toFixed(4)}</td>
-                            <td>${pos.current_price.toFixed(4)}</td>
-                            <td class="${pnlClass}">${pnlSign}${pos.pnl_pct.toFixed(2)}%</td>
-                            <td>${trailText}</td>
-                        </tr>
-                    `;
-                    tbody.innerHTML += row;
+            // Render positions
+            const posBody = document.getElementById('body-pos-' + node.id);
+            if (posBody) {
+                if (!data.active_slots || data.active_slots.length === 0) {
+                    posBody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-dim);">Sin posiciones abiertas</td></tr>';
+                } else {
+                    posBody.innerHTML = data.active_slots.map(s => {
+                        const pnlPct = s.pnl_pct || 0;
+                        const isUp = pnlPct >= 0;
+                        const ticker = s.ticker || s.symbol;
+                        return `<tr>
+                            <td style="font-weight:700;">${ticker}</td>
+                            <td>${(s.entry_price || 0).toFixed(4)}</td>
+                            <td>${(s.current_price || 0).toFixed(4)}</td>
+                            <td class="${isUp ? 'val-green' : 'val-red'}">${isUp ? '+' : ''}${pnlPct.toFixed(2)}%</td>
+                            <td><span class="badge-trail">S${s.trailing_stage || 0}</span></td>
+                            <td><button class="close-btn" onclick="forceClosePosition('${node.url}','${ticker}')">✕</button></td>
+                        </tr>`;
+                    }).join('');
                 }
             }
 
-            updateGlobalStats();
+            // Render history
+            const histBody = document.getElementById('body-hist-' + node.id);
+            if (histBody) {
+                if (trades.length === 0) {
+                    histBody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-dim);">Sin trades cerrados aún</td></tr>';
+                } else {
+                    histBody.innerHTML = trades.slice(0, 15).map(t => {
+                        const isWin = t.result === 'WIN';
+                        const hora = (t.timestamp || '').split(' ')[1] || t.timestamp;
+                        return `<tr>
+                            <td style="color:var(--text-dim);">${hora}</td>
+                            <td style="font-weight:700;">${t.ticker}</td>
+                            <td class="${isWin ? 'val-green' : 'val-red'}">${t.pnl_pct >= 0 ? '+' : ''}${t.pnl_pct}%</td>
+                            <td class="${isWin ? 'val-green' : 'val-red'}">${t.pnl_usd >= 0 ? '+' : ''}$${Math.abs(t.pnl_usd).toFixed(2)}</td>
+                            <td><span class="${isWin ? 'badge-win' : 'badge-loss'}">${t.result}</span></td>
+                        </tr>`;
+                    }).join('');
+                }
+            }
+
+            updateTotals();
         }
 
-        function updateGlobalStats() {
-            const tEq = globalData.a.equity + globalData.b.equity;
-            const tFree = globalData.a.free + globalData.b.free;
-            const tSlots = globalData.a.slots + globalData.b.slots;
+        function updateTotals() {
+            let totalEq = 0;
+            let totalPnl = 0;
+            let totalSlots = 0;
+            let connected = 0;
+            let timestamps = [];
+            let totalWinsUsd = 0;
+            let totalVolumeUsd = 0;
 
-            document.getElementById("global-equity").innerText = formatUSD(tEq);
-            document.getElementById("global-free").innerText = formatUSD(tFree);
-            document.getElementById("global-slots").innerText = `${tSlots} / 20`;
+            ALL_NODES.forEach(n => {
+                const s = nodeData[n.id];
+                if (s.connected) {
+                    totalEq += s.equity;
+                    totalPnl += s.pnl;
+                    totalSlots += s.slots;
+                    connected++;
+                    if (s.oldestTrade) timestamps.push(s.oldestTrade);
+
+                    if (s.rawData && s.rawData.trade_history) {
+                        s.rawData.trade_history.forEach(t => {
+                            if (t.pnl_usd > 0) totalWinsUsd += t.pnl_usd;
+                            totalVolumeUsd += (t.slot_base_usd || 250);
+                        });
+                    }
+                } else {
+                    totalEq += s.cap;
+                }
+            });
+
+            document.getElementById('global-equity').innerText = '$' + totalEq.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+            document.getElementById('global-equity-sub').innerText = connected + ' de 8 Nodos en Vivo (' + (connected*2500).toLocaleString() + ' USD activos)';
+
+            const pnlEl = document.getElementById('global-pnl');
+            pnlEl.innerText = (totalPnl >= 0 ? '+' : '') + '$' + totalPnl.toFixed(2);
+            pnlEl.style.color = totalPnl >= 0 ? 'var(--accent-green)' : 'var(--accent-rose)';
+
+            const activeCap = connected * 2500;
+            const pct = activeCap > 0 ? ((totalPnl / activeCap) * 100).toFixed(2) : '0.00';
+            document.getElementById('global-pnl-pct').innerText = (totalPnl >= 0 ? '+' : '') + pct + '% sobre capital activo';
+
+            document.getElementById('global-slots').innerText = totalSlots + ' / 80';
+            document.getElementById('global-slots-sub').innerText = (connected * 10) + ' de 80 slots en monitoreo';
+
+            document.getElementById('badge-all').innerText = connected + ' / 8';
+
+            const dAvg = document.getElementById('global-daily-avg');
+            if (timestamps.length > 0) {
+                timestamps.sort();
+                const oldest = new Date(timestamps[0].replace(' ', 'T'));
+                const diffMs = Date.now() - oldest;
+                const days = Math.floor(diffMs / (1000*60*60*24));
+                const hrs = Math.floor((diffMs % (1000*60*60*24)) / (1000*60*60));
+                document.getElementById('global-days').innerText = days === 0 ? hrs + 'h operando' : days + ' días operando';
+                const frac = Math.max(diffMs / (1000*60*60*24), 0.01);
+                const daily = (pct / frac).toFixed(2);
+                dAvg.innerText = (daily >= 0 ? '+' : '') + daily + '% / día';
+                dAvg.style.color = daily >= 0 ? 'var(--accent-green)' : 'var(--accent-rose)';
+            } else {
+                dAvg.innerText = '+0.00% / día';
+                dAvg.style.color = 'var(--text-muted)';
+            }
+
+            // ACTUALIZAR CÁLCULOS DE LA BÓVEDA CENTRAL
+            const b10 = totalWinsUsd * 0.10;
+            const b20 = totalWinsUsd * 0.20;
+            const b70 = totalWinsUsd * 0.70;
+            const estimatedKickback = totalVolumeUsd * 0.0002; // ~20% of 0.1% Binance fee
+
+            document.getElementById('boveda-10-val').innerText = '$' + b10.toFixed(2);
+            document.getElementById('boveda-20-val').innerText = '$' + b20.toFixed(2);
+            document.getElementById('boveda-70-val').innerText = '$' + b70.toFixed(2);
+            document.getElementById('boveda-kickback-val').innerText = '$' + estimatedKickback.toFixed(2);
+
+            const totalRetiroAcumulado = b10 + estimatedKickback;
+            const monthlyGoal = 5000.0;
+            const goalPct = Math.min((totalRetiroAcumulado / monthlyGoal) * 100, 100).toFixed(1);
+
+            document.getElementById('boveda-progress-bar').style.width = goalPct + '%';
+            document.getElementById('boveda-progress-pct').innerText = goalPct + '% logrado';
+            document.getElementById('boveda-progress-sub').innerText = `Total Acumulado para Retiro Directo: $${totalRetiroAcumulado.toFixed(2)} USD de $5,000.00 USD objetivo mensual.`;
+        }
+
+        async function initBtcChart() {
+            const container = document.getElementById('btc-chart');
+            const chart = LightweightCharts.createChart(container, {
+                layout: { background: { color: 'transparent' }, textColor: '#64748b' },
+                grid: { vertLines: { color: 'rgba(255,255,255,0.03)' }, horzLines: { color: 'rgba(255,255,255,0.03)' } },
+                timeScale: { borderColor: 'rgba(255,255,255,0.08)', timeVisible: false },
+                rightPriceScale: { borderColor: 'rgba(255,255,255,0.08)' }
+            });
+            const series = chart.addCandlestickSeries({
+                upColor: '#10b981', downColor: '#f43f5e', borderVisible: false,
+                wickUpColor: '#10b981', wickDownColor: '#f43f5e'
+            });
+            new ResizeObserver(() => {
+                chart.applyOptions({ width: container.clientWidth, height: container.clientHeight });
+            }).observe(container);
+
+            try {
+                const res = await fetch('https://data-api.binance.vision/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=30');
+                const klines = await res.json();
+                series.setData(klines.map(k => ({
+                    time: Math.floor(k[0]/1000), open: parseFloat(k[1]), high: parseFloat(k[2]),
+                    low: parseFloat(k[3]), close: parseFloat(k[4])
+                })));
+                const last = parseFloat(klines[klines.length-1][4]);
+                const first = parseFloat(klines[0][4]);
+                const chg = ((last - first) / first) * 100;
+                document.getElementById('btc-price').innerText = '$' + last.toLocaleString('en-US', {maximumFractionDigits:0});
+                const b = document.getElementById('btc-change');
+                b.innerText = (chg >= 0 ? '+' : '') + chg.toFixed(2) + '%';
+                b.style.background = chg >= 0 ? 'rgba(16,185,129,0.15)' : 'rgba(244,63,94,0.15)';
+                b.style.color = chg >= 0 ? '#34d399' : '#fb7185';
+                chart.timeScale().fitContent();
+            } catch(e) { console.warn(e); }
+        }
+
+        async function forceClosePosition(url, ticker) {
+            if (!confirm(`¿Cerrar posición de ${ticker} ahora?`)) return;
+            try {
+                const res = await fetch(url.replace(/\/$/, '') + '/api/force_close', {
+                    method: 'POST',
+                    headers: { 'Authorization': authHeader, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ticker: ticker })
+                });
+                const data = await res.json();
+                alert(data.ok ? `✅ ${data.message}` : `❌ Error: ${data.error}`);
+            } catch(e) { alert(`❌ Error de conexión: ${e.message}`); }
         }
     </script>
 </body>

@@ -58,17 +58,17 @@ class CryptoAnalyzer:
                 with urllib.request.urlopen(req, timeout=8) as resp:
                     data = json.loads(resp.read().decode())
                     # --- FILTRO CAPA 1: Excluir pares con keywords de stablecoins / apalancados ---
-                    STABLECOIN_KEYWORDS = [
+                    STABLE_BASE_ASSETS = {
                         'UP', 'DOWN', 'BEAR', 'BULL', 'FDUSD', 'USDC', 'TUSD', 'EUR',
                         'USD1', 'USD2', 'USD3', 'USDS', 'USDP', 'USDX', 'USDQ',
                         'BUSD', 'DAI', 'FRAX', 'LUSD', 'SUSD', 'PYUSD', 'USDD',
                         'OUSD', 'CUSD', 'GUSD', 'HUSD', 'EURS', 'EURC', 'EURI',
-                        'PAX', 'AGEUR', 'AEUR', 'UST', 'USDN', 'USDT'
-                    ]
+                        'PAX', 'AGEUR', 'AEUR', 'UST', 'USDN', 'USDT', 'WBTC', 'WETH'
+                    }
                     usdt_pairs = [
                         d for d in data
                         if d['symbol'].endswith('USDT')
-                        and not any(kw in d['symbol'].replace('USDT','') for kw in STABLECOIN_KEYWORDS)
+                        and d['symbol'][:-4] not in STABLE_BASE_ASSETS
                     ]
 
                     usdt_pairs.sort(key=lambda x: float(x['quoteVolume']), reverse=True)
@@ -83,10 +83,11 @@ class CryptoAnalyzer:
                     ]
 
                     import os
-                    srv = os.environ.get("RENDER_SERVICE_NAME", "").lower()
-                    if any(k in srv for k in ["nodo-3", "nodo-4", "nodo-7", "nodo-b", "exotico"]):
+                    raw_srv = os.environ.get("RENDER_SERVICE_NAME", "").lower()
+                    srv = raw_srv.replace("-", "").replace("_", "").strip()
+                    if any(k in srv for k in ["nodo3", "nodo4", "nodo7", "nodob", "exotico"]):
                         def_start, def_end = 51, 100
-                    elif any(k in srv for k in ["nodo-5", "nodo-8", "nodo-c", "rebote"]):
+                    elif any(k in srv for k in ["nodo5", "nodo8", "nodoc", "rebote"]):
                         def_start, def_end = 25, 75
                     else:
                         def_start, def_end = 1, 50

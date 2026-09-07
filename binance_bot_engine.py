@@ -34,7 +34,8 @@ LOG_FILE = "cripto_bot_ejecucion.log"
 trim_log_if_needed(LOG_FILE)
 
 # ─── AUTO-CONFIGURACIÓN INTELIGENTE SEGÚN EL NOMBRE DEL SERVICIO EN RENDER ───
-service_name = os.environ.get("RENDER_SERVICE_NAME", "").lower()
+raw_name = os.environ.get("RENDER_SERVICE_NAME", "").lower()
+service_name = raw_name.replace("-", "").replace("_", "").strip()
 
 # Perfil por defecto: NODO A (Conservador / Top 1-50 / DCA / Score 72)
 profile = {
@@ -55,7 +56,7 @@ profile = {
 }
 
 # Perfil NODO B: (Render 3, 4, 7 -> Agresivo / Top 51-100 / All-In / Score 68 / TP 12 / SL 7)
-if any(k in service_name for k in ["nodo-3", "nodo-4", "nodo-7", "nodo-b", "exotico"]):
+if any(k in service_name for k in ["nodo3", "nodo4", "nodo7", "nodob", "exotico"]):
     profile.update({
         "UNIVERSE_START": 51,
         "UNIVERSE_END": 100,
@@ -72,7 +73,7 @@ if any(k in service_name for k in ["nodo-3", "nodo-4", "nodo-7", "nodo-b", "exot
         "BREAKEVEN_EXIT": 0.5
     })
 # Perfil NODO C: (Render 5, 8 -> Rebotes / Top 25-75 / TP Corto 4 / Score 65)
-elif any(k in service_name for k in ["nodo-5", "nodo-8", "nodo-c", "rebote"]):
+elif any(k in service_name for k in ["nodo5", "nodo8", "nodoc", "rebote"]):
     profile.update({
         "UNIVERSE_START": 25,
         "UNIVERSE_END": 75,
@@ -88,7 +89,7 @@ elif any(k in service_name for k in ["nodo-5", "nodo-8", "nodo-c", "rebote"]):
         "TRAILING_LOCK_EXIT": 1.9,
         "BREAKEVEN_EXIT": 0.3
     })
-elif "nodo-2" in service_name:
+elif "nodo2" in service_name:
     profile["MIN_SCORE_ENTRY"] = 70.0
 
 MAX_SLOTS = 10
@@ -131,7 +132,7 @@ class BinanceBotEngine:
         self.total_wins = 0
         self.total_losses = 0
         
-        self.operating_capital_usd = 1000.0
+        self.operating_capital_usd = INITIAL_CAPITAL_USD
         self.reinvested_70_usd = 0.0
         self.drawdown_buffer_usd = 0.0
         self.profit_vault_usd = 0.0
@@ -428,16 +429,17 @@ class BinanceBotEngine:
             total_qty += micro_qty
             spent_accum += chunk_usd
 
+            symbol = (ticker + "USDT") if not ticker.endswith("USDT") else ticker
+            if not DRY_RUN:
+                chunk_success = self.client.place_market_order(symbol, "BUY", micro_qty)
+                if not chunk_success:
+                    log_message("ERROR", f"Fallo orden fragmento ICEBERG {i+1} en Binance para {ticker}")
+
             if i < len(chunks) - 1:
                 delay = round(random.uniform(1.2, 3.5), 2)
                 log_message("ICEBERG", f"   ↳ Fragmento {i+1}/{len(chunks)} [{ticker}]: ${chunk_usd:.2f} USD a ${micro_price:.4f}. Pausa táctica de {delay}s...")
                 time.sleep(delay)
 
-        # Ejecucion REAL
-        success = self.client.place_market_order(ticker + "USDT" if not ticker.endswith("USDT") else ticker, "BUY", total_qty)
-        if not success and not DRY_RUN:
-             log_message("ERROR", f"Fallo orden ICEBERG en Binance para {ticker}")
-             
         avg_entry_price = spent_accum / total_qty
         log_message("ICEBERG", f"✅ [ICEBERG COMPLETADO] [{ticker}]: Entrada total de ${spent_accum:.2f} USD ejecutada desincronizada. Precio Promedio: ${avg_entry_price:.4f}")
         return avg_entry_price, total_qty, spent_accum
@@ -473,7 +475,7 @@ class BinanceBotEngine:
                 avg_entry_price, total_qty, total_spent = self.execute_iceberg_order(ticker, initial_entry_cost, analysis["price"])
 
                 new_slot = {
-                    "id": int(time.time() * 1000),
+                    "id": f"{int(time.time() * 1000)}_{random.randint(1000, 9999)}",
                     "ticker": ticker,
                     "name": analysis["name"],
                     "symbol": analysis["symbol"],
@@ -526,19 +528,8 @@ class BinanceBotEngine:
             for slot in self.active_slots:
                 if slot["ticker"] in tickers_to_close:
                     pnl_pct = round(slot.get("pnl_pct", 0.0), 2)
-                    pnl_usd = round(slot.get("pnl_usd", 0.0), 2)
-                    result  = "WIN" if pnl_pct >= 0 else "LOSS"
-                    trade_record = {
-                        "timestamp": timestamp(),
-                        "ticker":    slot["ticker"],
-                        "result":    result,
-                        "pnl_pct":   pnl_pct,
-                        "pnl_usd":   pnl_usd,
-                        "reason":    "MANUAL_CLOSE"
-                    }
-                    self.trade_history.insert(0, trade_record)
-                    log_message("MANUAL_CLOSE", f"[{slot['ticker']}] cerrado manualmente desde el Dashboard. PnL: {pnl_pct}%")
-                    self.telegram.notify_close_slot(slot, result, "MANUAL_CLOSE")
+                    log_message("MANUAL_CLOSE", f"[{slot['ticker']}] procesando cierre manual desde Dashboard. PnL: {pnl_pct}%")
+                    self.close_slot(slot, "MANUAL_CLOSE", pnl_pct)
                     closed.append(slot["ticker"])
                 else:
                     remaining_slots.append(slot)

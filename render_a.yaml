@@ -9,7 +9,7 @@ services:
       - key: PORT
         value: 10000
       - key: UNIVERSE_START
-        value: "0"
+        value: "1"
       - key: UNIVERSE_END
         value: "50"
       - key: TAKE_PROFIT_PCT
