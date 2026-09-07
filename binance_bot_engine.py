@@ -33,23 +33,81 @@ STATE_FILE = os.environ.get("STATE_FILE_NAME", "cripto_bot_estado.json")
 LOG_FILE = "cripto_bot_ejecucion.log"
 trim_log_if_needed(LOG_FILE)
 
+# ─── AUTO-CONFIGURACIÓN INTELIGENTE SEGÚN EL NOMBRE DEL SERVICIO EN RENDER ───
+service_name = os.environ.get("RENDER_SERVICE_NAME", "").lower()
+
+# Perfil por defecto: NODO A (Conservador / Top 1-50 / DCA / Score 72)
+profile = {
+    "UNIVERSE_START": 1,
+    "UNIVERSE_END": 50,
+    "MIN_SCORE_ENTRY": 72.0,
+    "ENTRY_PCT": 0.50,
+    "SCALE_IN_PCT": 0.10,
+    "STOP_LOSS_PCT": 4.0,
+    "TAKE_PROFIT_PCT": 9.0,
+    "INITIAL_CAPITAL_USD": 2500.0,
+    "TRAILING_STAGE_1": 4.0,
+    "TRAILING_STAGE_1_LOCK": 0.3,
+    "TRAILING_STAGE_2": 6.5,
+    "TRAILING_STAGE_2_LOCK": 4.0,
+    "TRAILING_LOCK_EXIT": 3.9,
+    "BREAKEVEN_EXIT": 0.3
+}
+
+# Perfil NODO B: (Render 3, 4, 7 -> Agresivo / Top 51-100 / All-In / Score 68 / TP 12 / SL 7)
+if any(k in service_name for k in ["nodo-3", "nodo-4", "nodo-7", "nodo-b", "exotico"]):
+    profile.update({
+        "UNIVERSE_START": 51,
+        "UNIVERSE_END": 100,
+        "MIN_SCORE_ENTRY": 68.0,
+        "ENTRY_PCT": 1.0,
+        "SCALE_IN_PCT": 0.0,
+        "STOP_LOSS_PCT": 7.0,
+        "TAKE_PROFIT_PCT": 12.0,
+        "TRAILING_STAGE_1": 4.0,
+        "TRAILING_STAGE_1_LOCK": 0.5,
+        "TRAILING_STAGE_2": 6.5,
+        "TRAILING_STAGE_2_LOCK": 5.0,
+        "TRAILING_LOCK_EXIT": 4.8,
+        "BREAKEVEN_EXIT": 0.5
+    })
+# Perfil NODO C: (Render 5, 8 -> Rebotes / Top 25-75 / TP Corto 4 / Score 65)
+elif any(k in service_name for k in ["nodo-5", "nodo-8", "nodo-c", "rebote"]):
+    profile.update({
+        "UNIVERSE_START": 25,
+        "UNIVERSE_END": 75,
+        "MIN_SCORE_ENTRY": 65.0,
+        "ENTRY_PCT": 0.50,
+        "SCALE_IN_PCT": 0.10,
+        "STOP_LOSS_PCT": 4.0,
+        "TAKE_PROFIT_PCT": 4.0,
+        "TRAILING_STAGE_1": 2.5,
+        "TRAILING_STAGE_1_LOCK": 0.3,
+        "TRAILING_STAGE_2": 3.5,
+        "TRAILING_STAGE_2_LOCK": 2.0,
+        "TRAILING_LOCK_EXIT": 1.9,
+        "BREAKEVEN_EXIT": 0.3
+    })
+elif "nodo-2" in service_name:
+    profile["MIN_SCORE_ENTRY"] = 70.0
+
 MAX_SLOTS = 10
-TAKE_PROFIT_PCT = float(os.environ.get("TAKE_PROFIT_PCT", 9.0))
-STOP_LOSS_PCT = float(os.environ.get("STOP_LOSS_PCT", 4.0))
-TRAILING_STAGE_1 = float(os.environ.get("TRAILING_STAGE_1", 4.0))
-TRAILING_STAGE_1_LOCK = float(os.environ.get("TRAILING_STAGE_1_LOCK", 0.3))
-TRAILING_STAGE_2 = float(os.environ.get("TRAILING_STAGE_2", 6.5))
-TRAILING_STAGE_2_LOCK = float(os.environ.get("TRAILING_STAGE_2_LOCK", 4.0))
+TAKE_PROFIT_PCT = float(os.environ.get("TAKE_PROFIT_PCT", profile["TAKE_PROFIT_PCT"]))
+STOP_LOSS_PCT = float(os.environ.get("STOP_LOSS_PCT", profile["STOP_LOSS_PCT"]))
+TRAILING_STAGE_1 = float(os.environ.get("TRAILING_STAGE_1", profile["TRAILING_STAGE_1"]))
+TRAILING_STAGE_1_LOCK = float(os.environ.get("TRAILING_STAGE_1_LOCK", profile["TRAILING_STAGE_1_LOCK"]))
+TRAILING_STAGE_2 = float(os.environ.get("TRAILING_STAGE_2", profile["TRAILING_STAGE_2"]))
+TRAILING_STAGE_2_LOCK = float(os.environ.get("TRAILING_STAGE_2_LOCK", profile["TRAILING_STAGE_2_LOCK"]))
+TRAILING_LOCK_EXIT = float(os.environ.get("TRAILING_LOCK_EXIT", profile["TRAILING_LOCK_EXIT"]))
+BREAKEVEN_EXIT = float(os.environ.get("BREAKEVEN_EXIT", profile["BREAKEVEN_EXIT"]))
 BINANCE_FEE_PCT = 0.024 # Tarifas optimizadas con descuento BNB + Maker Limit Orders + Kickback
 
-INITIAL_CAPITAL_USD = float(os.environ.get("INITIAL_CAPITAL_USD", 1000.0))
-ENTRY_PCT = float(os.environ.get("ENTRY_PCT", 0.50))          # Entrada inicial 50% del slot
-SCALE_IN_PCT = float(os.environ.get("SCALE_IN_PCT", 0.10))       # Cada recompra es 10% del slot
-MIN_SCORE_ENTRY = float(os.environ.get("MIN_SCORE_ENTRY", 68.0))    # Score mínimo para abrir posición
-COOLDOWN_REENTRY_SEC = float(os.environ.get("COOLDOWN_REENTRY_SEC", 3600))   # 60 min cooldown antes de reentrar en mismo ticker
-COOLDOWN_SCALE_IN_SEC = float(os.environ.get("COOLDOWN_SCALE_IN_SEC", 300))   # 5 min cooldown entre recompras
-TRAILING_LOCK_EXIT = float(os.environ.get("TRAILING_LOCK_EXIT", 3.9))      # Cierre Stage 2 con margen de gracia
-BREAKEVEN_EXIT = float(os.environ.get("BREAKEVEN_EXIT", 0.3))          # Cierre Stage 1 breakeven
+INITIAL_CAPITAL_USD = float(os.environ.get("INITIAL_CAPITAL_USD", profile["INITIAL_CAPITAL_USD"]))
+ENTRY_PCT = float(os.environ.get("ENTRY_PCT", profile["ENTRY_PCT"]))
+SCALE_IN_PCT = float(os.environ.get("SCALE_IN_PCT", profile["SCALE_IN_PCT"]))
+MIN_SCORE_ENTRY = float(os.environ.get("MIN_SCORE_ENTRY", profile["MIN_SCORE_ENTRY"]))
+COOLDOWN_REENTRY_SEC = float(os.environ.get("COOLDOWN_REENTRY_SEC", 3600))
+COOLDOWN_SCALE_IN_SEC = float(os.environ.get("COOLDOWN_SCALE_IN_SEC", 300))
 
 def timestamp():
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")

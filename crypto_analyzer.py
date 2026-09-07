@@ -83,8 +83,16 @@ class CryptoAnalyzer:
                     ]
 
                     import os
-                    u_start = int(os.environ.get("UNIVERSE_START", 50))
-                    u_end   = int(os.environ.get("UNIVERSE_END", 100))
+                    srv = os.environ.get("RENDER_SERVICE_NAME", "").lower()
+                    if any(k in srv for k in ["nodo-3", "nodo-4", "nodo-7", "nodo-b", "exotico"]):
+                        def_start, def_end = 51, 100
+                    elif any(k in srv for k in ["nodo-5", "nodo-8", "nodo-c", "rebote"]):
+                        def_start, def_end = 25, 75
+                    else:
+                        def_start, def_end = 1, 50
+
+                    u_start = int(os.environ.get("UNIVERSE_START", def_start))
+                    u_end   = int(os.environ.get("UNIVERSE_END", def_end))
                     top_slice = usdt_pairs[u_start:u_end]
 
                     results = []
