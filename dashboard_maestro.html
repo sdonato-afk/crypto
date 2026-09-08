@@ -561,6 +561,7 @@
                     });
                 }
             }
+            updateTotals();
         }
 
         function toggleTab(nodeId, tab) {
@@ -716,7 +717,23 @@
             let totalWinsUsd = 0;
             let totalVolumeUsd = 0;
 
+            // Compute global variables for Boveda always
             ALL_NODES.forEach(n => {
+                const s = nodeData[n.id];
+                if (s.connected && s.rawData && s.rawData.trade_history) {
+                    s.rawData.trade_history.forEach(t => {
+                        if (t.pnl_usd > 0) totalWinsUsd += t.pnl_usd;
+                        totalVolumeUsd += (t.slot_base_usd || 250);
+                    });
+                }
+            });
+
+            let nodesToProcess = ALL_NODES;
+            if (currentFilter !== 'all' && currentFilter !== 'boveda') {
+                nodesToProcess = ALL_NODES.filter(n => n.granjaId === currentFilter);
+            }
+
+            nodesToProcess.forEach(n => {
                 const s = nodeData[n.id];
                 if (s.connected) {
                     totalEq += s.equity;
@@ -724,20 +741,16 @@
                     totalSlots += s.slots;
                     connected++;
                     if (s.oldestTrade) timestamps.push(s.oldestTrade);
-
-                    if (s.rawData && s.rawData.trade_history) {
-                        s.rawData.trade_history.forEach(t => {
-                            if (t.pnl_usd > 0) totalWinsUsd += t.pnl_usd;
-                            totalVolumeUsd += (t.slot_base_usd || 250);
-                        });
-                    }
                 } else {
                     totalEq += s.cap;
                 }
             });
 
+            const expectedNodes = nodesToProcess.length;
+            const expectedSlots = expectedNodes * 10;
+
             document.getElementById('global-equity').innerText = '$' + totalEq.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
-            document.getElementById('global-equity-sub').innerText = connected + ' de 8 Nodos en Vivo (' + (connected*2500).toLocaleString() + ' USD activos)';
+            document.getElementById('global-equity-sub').innerText = connected + ' de ' + expectedNodes + ' Nodos en Vivo (' + (connected*2500).toLocaleString() + ' USD activos)';
 
             const pnlEl = document.getElementById('global-pnl');
             pnlEl.innerText = (totalPnl >= 0 ? '+' : '') + '$' + totalPnl.toFixed(2);
@@ -747,10 +760,12 @@
             const pct = activeCap > 0 ? ((totalPnl / activeCap) * 100).toFixed(2) : '0.00';
             document.getElementById('global-pnl-pct').innerText = (totalPnl >= 0 ? '+' : '') + pct + '% sobre capital activo';
 
-            document.getElementById('global-slots').innerText = totalSlots + ' / 80';
-            document.getElementById('global-slots-sub').innerText = (connected * 10) + ' de 80 slots en monitoreo';
+            document.getElementById('global-slots').innerText = totalSlots + ' / ' + expectedSlots;
+            document.getElementById('global-slots-sub').innerText = (connected * 10) + ' de ' + expectedSlots + ' slots en monitoreo';
 
-            document.getElementById('badge-all').innerText = connected + ' / 8';
+            // Also update the badge for "All" just in case we need global connected count
+            const globalConnected = ALL_NODES.filter(n => nodeData[n.id].connected).length;
+            document.getElementById('badge-all').innerText = globalConnected + ' / 8';
 
             const dAvg = document.getElementById('global-daily-avg');
             if (timestamps.length > 0) {
