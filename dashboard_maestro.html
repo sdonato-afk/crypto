@@ -774,7 +774,11 @@
                 const diffMs = Date.now() - oldest;
                 const days = Math.floor(diffMs / (1000*60*60*24));
                 const hrs = Math.floor((diffMs % (1000*60*60*24)) / (1000*60*60));
-                document.getElementById('global-days').innerText = days === 0 ? hrs + 'h operando' : days + ' días operando';
+                if (days === 0) {
+                    document.getElementById('global-days').innerText = hrs + 'h operando';
+                } else {
+                    document.getElementById('global-days').innerText = days + 'd ' + hrs + 'h operando';
+                }
                 const frac = Math.max(diffMs / (1000*60*60*24), 0.01);
                 const daily = (pct / frac).toFixed(2);
                 dAvg.innerText = (daily >= 0 ? '+' : '') + daily + '% / día';
