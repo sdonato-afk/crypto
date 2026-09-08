@@ -73,7 +73,7 @@ if any(k in service_name for k in ["nodo3", "nodo4", "nodo7", "nodob", "exotico"
         "BREAKEVEN_EXIT": 0.5
     })
 # Perfil NODO C: (Render 5, 8 -> Rebotes / Top 25-75 / TP Corto 4 / Score 65)
-elif any(k in service_name for k in ["nodo5", "nodo8", "nodoc", "rebote"]):
+elif any(k in service_name for k in ["nodo5", "nodo8", "nodoc", "rebote", "fo30"]):
     profile.update({
         "UNIVERSE_START": 25,
         "UNIVERSE_END": 75,
