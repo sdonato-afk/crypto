@@ -270,8 +270,8 @@ class BinanceBotEngine:
         state = {
             "botStatus": "PAPER_TRADING_TOP50_100_ACTIVO",
             "executionMode": "PAPER_TRADING_REAL_MARKET_DATA",
-            "universe_start": int(os.environ.get("UNIVERSE_START", 50)),
-            "universe_end": int(os.environ.get("UNIVERSE_END", 100)),
+            "universe_start": int(os.environ.get("UNIVERSE_START", profile["UNIVERSE_START"])),
+            "universe_end": int(os.environ.get("UNIVERSE_END", profile["UNIVERSE_END"])),
             "lastRun": timestamp(),
             "btcGuard": self.btc_guard_status,
             "activeSlotsCount": len(self.active_slots),
