@@ -56,7 +56,7 @@ profile = {
 }
 
 # Perfil NODO B: (Render 3, 4, 7 -> Agresivo / Top 51-100 / All-In / Score 68 / TP 12 / SL 7)
-if any(k in service_name for k in ["nodo3", "nodo4", "nodo7", "nodob", "exotico"]):
+if any(k in service_name for k in ["nodo3", "nodo4", "nodo7", "nodob", "exotico", "g6gq"]):
     profile.update({
         "UNIVERSE_START": 51,
         "UNIVERSE_END": 100,
