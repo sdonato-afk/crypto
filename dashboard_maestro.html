@@ -579,15 +579,18 @@
         }
 
         function initializeFleet() {
-            const user = document.getElementById('auth-user').value;
-            const pass = document.getElementById('auth-pass').value;
+            const user = document.getElementById('auth-user').value || 'admin';
+            const pass = document.getElementById('auth-pass').value || 'cripto2026';
             authHeader = 'Basic ' + btoa(user + ':' + pass);
-            document.getElementById('auth-overlay').style.display = 'none';
+            const overlay = document.getElementById('auth-overlay');
+            if (overlay) overlay.style.display = 'none';
             renderStructure();
             initBtcChart();
             forceRefresh();
             setInterval(forceRefresh, 8000);
         }
+
+        window.addEventListener('DOMContentLoaded', initializeFleet);
 
         async function forceRefresh() {
             for (const n of ALL_NODES) {
@@ -693,13 +696,16 @@
                 } else {
                     histBody.innerHTML = trades.slice(0, 15).map(t => {
                         const isWin = t.result === 'WIN';
-                        const hora = (t.timestamp || '').split(' ')[1] || t.timestamp;
+                        const pnlPct = parseFloat(t.pnl_pct || 0);
+                        const pnlUsd = parseFloat(t.pnl_usd || 0);
+                        const hora = (t.timestamp || '').split(' ')[1] || t.timestamp || '--:--';
+                        const ticker = t.ticker || t.symbol || 'ASSET';
                         return `<tr>
                             <td style="color:var(--text-dim);">${hora}</td>
-                            <td style="font-weight:700;">${t.ticker}</td>
-                            <td class="${isWin ? 'val-green' : 'val-red'}">${t.pnl_pct >= 0 ? '+' : ''}${t.pnl_pct}%</td>
-                            <td class="${isWin ? 'val-green' : 'val-red'}">${t.pnl_usd >= 0 ? '+' : ''}$${Math.abs(t.pnl_usd).toFixed(2)}</td>
-                            <td><span class="${isWin ? 'badge-win' : 'badge-loss'}">${t.result}</span></td>
+                            <td style="font-weight:700;">${ticker}</td>
+                            <td class="${isWin ? 'val-green' : 'val-red'}">${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(2)}%</td>
+                            <td class="${isWin ? 'val-green' : 'val-red'}">${pnlUsd >= 0 ? '+' : ''}$${Math.abs(pnlUsd).toFixed(2)}</td>
+                            <td><span class="${isWin ? 'badge-win' : 'badge-loss'}">${t.result || 'CLOSE'}</span></td>
                         </tr>`;
                     }).join('');
                 }
@@ -714,15 +720,19 @@
             let totalSlots = 0;
             let connected = 0;
             let totalLossesUsd = 0;
+            let totalWinsUsd = 0;
+            let totalVolumeUsd = 0;
+            let timestamps = [];
 
             // Compute global variables for Boveda always
             ALL_NODES.forEach(n => {
                 const s = nodeData[n.id];
                 if (s.connected && s.rawData && s.rawData.trade_history) {
                     s.rawData.trade_history.forEach(t => {
-                        if (t.pnl_usd > 0) totalWinsUsd += t.pnl_usd;
-                        else if (t.pnl_usd < 0) totalLossesUsd += Math.abs(t.pnl_usd);
-                        totalVolumeUsd += (t.slot_base_usd || 250);
+                        const pnl = parseFloat(t.pnl_usd || 0);
+                        if (pnl > 0) totalWinsUsd += pnl;
+                        else if (pnl < 0) totalLossesUsd += Math.abs(pnl);
+                        totalVolumeUsd += parseFloat(t.slot_base_usd || 250);
                     });
                 }
             });
@@ -733,19 +743,24 @@
             }
 
             nodesToProcess.forEach(n => {
+                if (!n.url) return; // Ignorar nodos no montados aún (Nodos 6, 7, 8)
                 const s = nodeData[n.id];
                 if (s.connected) {
                     totalEq += s.equity;
                     totalPnl += s.pnl;
                     totalSlots += s.slots;
                     connected++;
-                    if (s.oldestTrade) timestamps.push(s.oldestTrade);
+                    if (s.oldestTrade) {
+                        timestamps.push(s.oldestTrade);
+                    } else if (s.rawData && s.rawData.lastRun) {
+                        timestamps.push(s.rawData.lastRun);
+                    }
                 } else {
                     totalEq += s.cap;
                 }
             });
 
-            const expectedNodes = nodesToProcess.length;
+            const expectedNodes = nodesToProcess.filter(n => n.url).length;
             const expectedSlots = expectedNodes * 10;
 
             document.getElementById('global-equity').innerText = '$' + totalEq.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
@@ -756,8 +771,9 @@
             pnlEl.style.color = totalPnl >= 0 ? 'var(--accent-green)' : 'var(--accent-rose)';
 
             const activeCap = connected * 2500;
-            const pct = activeCap > 0 ? ((totalPnl / activeCap) * 100).toFixed(2) : '0.00';
-            document.getElementById('global-pnl-pct').innerText = (totalPnl >= 0 ? '+' : '') + pct + '% sobre capital activo';
+            const pct = activeCap > 0 ? ((totalPnl / activeCap) * 100) : 0;
+            const pctStr = pct.toFixed(2);
+            document.getElementById('global-pnl-pct').innerText = (pct >= 0 ? '+' : '') + pctStr + '% sobre capital activo';
 
             document.getElementById('global-slots').innerText = totalSlots + ' / ' + expectedSlots;
             document.getElementById('global-slots-sub').innerText = (connected * 10) + ' de ' + expectedSlots + ' slots en monitoreo';
@@ -769,17 +785,19 @@
             const dAvg = document.getElementById('global-daily-avg');
             if (timestamps.length > 0) {
                 timestamps.sort();
-                const oldest = new Date(timestamps[0].replace(' ', 'T'));
-                const diffMs = Date.now() - oldest;
+                let isoStr = timestamps[0].replace(' ', 'T');
+                if (!isoStr.endsWith('Z')) isoStr += 'Z';
+                const oldest = new Date(isoStr);
+                const diffMs = Math.max(Date.now() - oldest.getTime(), 60000);
                 const days = Math.floor(diffMs / (1000*60*60*24));
                 const hrs = Math.floor((diffMs % (1000*60*60*24)) / (1000*60*60));
                 if (days === 0) {
-                    document.getElementById('global-days').innerText = hrs + 'h operando';
+                    document.getElementById('global-days').innerText = (hrs || 1) + 'h operando';
                 } else {
                     document.getElementById('global-days').innerText = days + 'd ' + hrs + 'h operando';
                 }
-                const frac = Math.max(diffMs / (1000*60*60*24), 0.01);
-                const daily = (pct / frac).toFixed(2);
+                const daysFrac = Math.max(diffMs / (1000*60*60*24), 1 / 24);
+                const daily = (pct / daysFrac).toFixed(2);
                 dAvg.innerText = (daily >= 0 ? '+' : '') + daily + '% / día';
                 dAvg.style.color = daily >= 0 ? 'var(--accent-green)' : 'var(--accent-rose)';
             } else {

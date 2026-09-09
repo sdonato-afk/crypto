@@ -48,11 +48,11 @@ profile = {
     "TAKE_PROFIT_PCT": 9.0,
     "INITIAL_CAPITAL_USD": 2500.0,
     "TRAILING_STAGE_1": 4.0,
-    "TRAILING_STAGE_1_LOCK": 0.3,
+    "TRAILING_STAGE_1_LOCK": 1.5,
     "TRAILING_STAGE_2": 6.5,
     "TRAILING_STAGE_2_LOCK": 4.0,
     "TRAILING_LOCK_EXIT": 3.9,
-    "BREAKEVEN_EXIT": 0.3
+    "BREAKEVEN_EXIT": 1.5
 }
 
 # Perfil NODO B: (Render 3, 4, 7 -> Agresivo / Top 51-100 / All-In / Score 68 / TP 12 / SL 7)
@@ -66,11 +66,11 @@ if any(k in service_name for k in ["nodo3", "nodo4", "nodo7", "nodob", "exotico"
         "STOP_LOSS_PCT": 7.0,
         "TAKE_PROFIT_PCT": 12.0,
         "TRAILING_STAGE_1": 4.0,
-        "TRAILING_STAGE_1_LOCK": 0.5,
+        "TRAILING_STAGE_1_LOCK": 2.5,
         "TRAILING_STAGE_2": 6.5,
         "TRAILING_STAGE_2_LOCK": 5.0,
         "TRAILING_LOCK_EXIT": 4.8,
-        "BREAKEVEN_EXIT": 0.5
+        "BREAKEVEN_EXIT": 2.5
     })
 # Perfil NODO C: (Render 5, 8 -> Rebotes / Top 25-75 / TP Corto 4 / Score 65)
 elif any(k in service_name for k in ["nodo5", "nodo8", "nodoc", "rebote", "fo30"]):
@@ -83,11 +83,11 @@ elif any(k in service_name for k in ["nodo5", "nodo8", "nodoc", "rebote", "fo30"
         "STOP_LOSS_PCT": 4.0,
         "TAKE_PROFIT_PCT": 4.0,
         "TRAILING_STAGE_1": 2.5,
-        "TRAILING_STAGE_1_LOCK": 0.3,
+        "TRAILING_STAGE_1_LOCK": 1.5,
         "TRAILING_STAGE_2": 3.5,
         "TRAILING_STAGE_2_LOCK": 2.0,
         "TRAILING_LOCK_EXIT": 1.9,
-        "BREAKEVEN_EXIT": 0.3
+        "BREAKEVEN_EXIT": 1.5
     })
 elif "nodo2" in service_name:
     profile["MIN_SCORE_ENTRY"] = 70.0
@@ -108,6 +108,7 @@ ENTRY_PCT = float(os.environ.get("ENTRY_PCT", profile["ENTRY_PCT"]))
 SCALE_IN_PCT = float(os.environ.get("SCALE_IN_PCT", profile["SCALE_IN_PCT"]))
 MIN_SCORE_ENTRY = float(os.environ.get("MIN_SCORE_ENTRY", profile["MIN_SCORE_ENTRY"]))
 COOLDOWN_REENTRY_SEC = float(os.environ.get("COOLDOWN_REENTRY_SEC", 3600))
+COOLDOWN_STOP_LOSS_SEC = float(os.environ.get("COOLDOWN_STOP_LOSS_SEC", 86400)) # 24 Horas tras Stop Loss
 COOLDOWN_SCALE_IN_SEC = float(os.environ.get("COOLDOWN_SCALE_IN_SEC", 300))
 
 def timestamp():
@@ -138,6 +139,7 @@ class BinanceBotEngine:
         self.profit_vault_usd = 0.0
         self.net_pnl_usd = 0.0
         self.last_closed_timestamps = {} # ticker: timestamp epoch
+        self.last_stop_loss_timestamps = {} # ticker: timestamp epoch (24h Cooldown)
 
         self.btc_guard_status = {"status": "NORMAL", "reason": "Iniciando bot", "drop_pct": 0.0}
         self.load_state()
@@ -384,6 +386,9 @@ class BinanceBotEngine:
                 self.operating_capital_usd -= remaining_loss
 
         self.last_closed_timestamps[slot["ticker"]] = time.time()
+        if final_net_pnl_pct <= 0 or "STOP_LOSS" in reason:
+            self.last_stop_loss_timestamps[slot["ticker"]] = time.time()
+            log_message("COOLDOWN", f"🛑 Cooldown de 24h activado para [{slot['ticker']}] tras Stop Loss.")
 
         log_message("CLOSE_OCO", f"POSICIÓN CERRADA [{tag}]: [{slot['ticker']}] Motivo: {reason}. P&L Neto: {final_net_pnl_pct:+.2f}% (${pnl_usd:+.2f} USD).")
         total_equity = self.operating_capital_usd + self.drawdown_buffer_usd + self.profit_vault_usd
@@ -463,7 +468,12 @@ class BinanceBotEngine:
             ticker = analysis["ticker"]
             score = analysis["score"]
 
-            # Cooldown de 60 minutos (3600 segundos) por moneda
+            # Cooldown de 24 horas tras Stop Loss para evitar re-entradas impulsivas en caídas
+            last_sl = self.last_stop_loss_timestamps.get(ticker, 0)
+            if (now - last_sl) < COOLDOWN_STOP_LOSS_SEC:
+                continue
+
+            # Cooldown habitual de 60 minutos por moneda
             last_closed = self.last_closed_timestamps.get(ticker, 0)
             if (now - last_closed) < COOLDOWN_REENTRY_SEC:
                 continue
