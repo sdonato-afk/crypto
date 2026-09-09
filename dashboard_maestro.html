@@ -713,9 +713,7 @@
             let totalPnl = 0;
             let totalSlots = 0;
             let connected = 0;
-            let timestamps = [];
-            let totalWinsUsd = 0;
-            let totalVolumeUsd = 0;
+            let totalLossesUsd = 0;
 
             // Compute global variables for Boveda always
             ALL_NODES.forEach(n => {
@@ -723,6 +721,7 @@
                 if (s.connected && s.rawData && s.rawData.trade_history) {
                     s.rawData.trade_history.forEach(t => {
                         if (t.pnl_usd > 0) totalWinsUsd += t.pnl_usd;
+                        else if (t.pnl_usd < 0) totalLossesUsd += Math.abs(t.pnl_usd);
                         totalVolumeUsd += (t.slot_base_usd || 250);
                     });
                 }
@@ -788,10 +787,29 @@
                 dAvg.style.color = 'var(--text-muted)';
             }
 
-            // ACTUALIZAR CÁLCULOS DE LA BÓVEDA CENTRAL
-            const b10 = totalWinsUsd * 0.10;
-            const b20 = totalWinsUsd * 0.20;
-            const b70 = totalWinsUsd * 0.70;
+            // ACTUALIZAR CÁLCULOS DE LA BÓVEDA CENTRAL (CASCADA DE ABSORCIÓN DE PÉRDIDAS)
+            let b20 = 0, b70 = 0, b10 = 0;
+            const potentialBuffer = totalWinsUsd * 0.20;
+            
+            if (potentialBuffer >= totalLossesUsd) {
+                b20 = potentialBuffer - totalLossesUsd;
+                b70 = totalWinsUsd * 0.70;
+                b10 = totalWinsUsd * 0.10;
+            } else {
+                b20 = 0; // Buffer consumido al 100% por pérdidas
+                const unabsorbedLoss = totalLossesUsd - potentialBuffer;
+                const potentialReinvest = totalWinsUsd * 0.70;
+                if (potentialReinvest >= unabsorbedLoss) {
+                    b70 = potentialReinvest - unabsorbedLoss;
+                    b10 = totalWinsUsd * 0.10;
+                } else {
+                    b70 = 0;
+                    const leftoverLoss = unabsorbedLoss - potentialReinvest;
+                    const potentialVault = totalWinsUsd * 0.10;
+                    b10 = Math.max(0, potentialVault - leftoverLoss);
+                }
+            }
+
             const estimatedKickback = totalVolumeUsd * 0.0002; // ~20% of 0.1% Binance fee
 
             document.getElementById('boveda-10-val').innerText = '$' + b10.toFixed(2);
