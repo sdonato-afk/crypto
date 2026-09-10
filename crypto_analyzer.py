@@ -113,25 +113,32 @@ class CryptoAnalyzer:
         return []  # Guardia defensiva
 
     def check_btc_guard(self):
-        """BTC Guard: Monitorea flash crash de Bitcoin (> -1.2% en 15m)"""
-        candles = self.fetch_klines("BTCUSDT", interval="5m", limit=6)
-        if len(candles) < 5:
+        """BTC Guard: Monitorea Tendencia Macro EMA 50 en 4H / D1 de Bitcoin"""
+        candles = self.fetch_klines("BTCUSDT", interval="4h", limit=60)
+        if len(candles) < 50:
             return {"status": "OK", "reason": "Sin datos suficientes BTC", "drop_pct": 0.0}
 
-        latest_close = candles[-1]["close"]
-        prev_close = candles[-4]["close"]  # Cierre de hace ~20 min (4 velas × 5m), más estable
-        drop_pct = ((latest_close - prev_close) / prev_close) * 100.0
+        closes = [c["close"] for c in candles]
+        latest_close = closes[-1]
+        
+        # Calcular EMA 50 en 4H
+        k = 2.0 / (50.0 + 1.0)
+        ema50 = sum(closes[:50]) / 50.0
+        for val in closes[50:]:
+            ema50 = (val * k) + (ema50 * (1.0 - k))
+            
+        drop_pct = ((latest_close - closes[-6]) / closes[-6]) * 100.0 if len(closes) >= 6 else 0.0
 
-        if drop_pct <= -1.2:
+        if latest_close < ema50:
             return {
-                "status": "PANIC_LOCK",
-                "reason": f"🚨 ALERTA BTC FLASH CRASH: BTC cayó {drop_pct:.2f}% en 15m. Mercado Congelado.",
+                "status": "MACRO_BEAR_PAUSE",
+                "reason": f"[MACRO PAUSE] BTC (${latest_close:.1f}) por debajo de EMA 50 4H (${ema50:.1f}). Compras Congeladas.",
                 "drop_pct": round(drop_pct, 2)
             }
 
         return {
             "status": "NORMAL",
-            "reason": "Mercado BTC Estable / Alcista",
+            "reason": f"[MACRO NORMAL] Mercado BTC Alcista (${latest_close:.1f} >= EMA50 ${ema50:.1f})",
             "drop_pct": round(drop_pct, 2)
         }
 
@@ -150,12 +157,12 @@ class CryptoAnalyzer:
 
     def analyze_volume_absorption(self, crypto_item):
         """
-        Estrategia Combinada Avanzada: Geometría SWEEP 4H + Divergencia RSI + Absorción 2.5x + Filtro Iliquidez
+        Estrategia SWING TRADING (4H / 7 Días): Geometría SWEEP 7D + Divergencia RSI 4H + Absorción 1.8x + Filtro Iliquidez
         """
         symbol = crypto_item["symbol"]
-        candles = self.fetch_klines(symbol, interval="5m", limit=60) # Últimas 5 horas (cobertura 4H + 1H)
+        candles = self.fetch_klines(symbol, interval="4h", limit=50) # Últimas 50 velas de 4H (~8.3 días de datos)
 
-        if not candles or len(candles) < 48:
+        if not candles or len(candles) < 42:
             return {
                 "ticker": crypto_item["ticker"],
                 "name": crypto_item["name"],
@@ -176,9 +183,9 @@ class CryptoAnalyzer:
         c_low = last_candle["low"]
         
         # --- FILTRO 1: ANTI-ILIQUIDEZ / ANTI-FLASH CRASH (Anti-TUT) ---
-        # Exige al menos $5,000 USD negociados en la última vela de 5 minutos
-        quote_volume_5m = current_price * last_candle["volume"]
-        if quote_volume_5m < 5000.0:
+        # Exige al menos $100,000 USD negociados por vela de 4H
+        quote_volume_4h = current_price * last_candle["volume"]
+        if quote_volume_4h < 100000.0:
             return {
                 "ticker": crypto_item["ticker"],
                 "name": crypto_item["name"],
@@ -189,83 +196,65 @@ class CryptoAnalyzer:
                 "volume_ratio": 0.0,
                 "rsi": 50.0,
                 "score": 0.0,
-                "signal": "ILIQUIDEZ_ALTA 🔴"
+                "signal": "ILIQUIDEZ_ALTA"
             }
 
-        high_2h = max(c["high"] for c in candles[-24:])
-        dip_pct = ((current_price - high_2h) / high_2h) * 100.0
+        high_7d = max(c["high"] for c in candles[-42:])
+        dip_pct = ((current_price - high_7d) / high_7d) * 100.0
         
         total_range = c_high - c_low
         lower_wick = min(c_open, c_close) - c_low
         wick_ratio = (lower_wick / total_range) if total_range > 0 else 0.0
 
-        prev_24_candles = candles[-25:-1]
-        avg_volume = sum(c["volume"] for c in prev_24_candles) / len(prev_24_candles)
+        prev_42_candles = candles[-43:-1]
+        avg_volume = sum(c["volume"] for c in prev_42_candles) / len(prev_42_candles)
         volume_ratio = (last_candle["volume"] / avg_volume) if avg_volume > 0 else 1.0
         
         rsi_val = self.calculate_rsi(candles, period=14)
 
-        # --- GEOMETRÍA 1: BARRIDO DE LIQUIDEZ 4H (SWEEP LIQUIDITY / Turtle Soup) ---
-        # Identifica el mínimo más bajo de las últimas 4 horas (48 velas)
-        low_4h = min(c["low"] for c in candles[-49:-1])
-        is_sweep = (c_low < low_4h and c_close > low_4h and wick_ratio >= 0.40)
+        # --- SWING GEOMETRÍA 1: BARRIDO DE MÍNIMOS DE 7 DÍAS (4H SWEEP / Turtle Soup) ---
+        low_7d = min(c["low"] for c in candles[-43:-1])
+        is_swing_sweep = (c_low < low_7d and c_close > low_7d and wick_ratio >= 0.35)
 
-        # --- GEOMETRÍA 2: DIVERGENCIA ALCISTA RSI ---
-        p_low_1 = min(c["low"] for c in candles[-24:-12])
-        p_low_2 = min(c["low"] for c in candles[-12:])
-        idx_l1 = len(candles) - 24 + [c["low"] for c in candles[-24:-12]].index(p_low_1)
-        idx_l2 = len(candles) - 12 + [c["low"] for c in candles[-12:]].index(p_low_2)
+        # --- SWING GEOMETRÍA 2: DIVERGENCIA ALCISTA RSI 4H ---
+        p_low_1 = min(c["low"] for c in candles[-30:-15])
+        p_low_2 = min(c["low"] for c in candles[-15:])
+        idx_l1 = len(candles) - 30 + [c["low"] for c in candles[-30:-15]].index(p_low_1)
+        idx_l2 = len(candles) - 15 + [c["low"] for c in candles[-15:]].index(p_low_2)
         rsi_l1 = self.calculate_rsi(candles[:idx_l1+1])
         rsi_l2 = self.calculate_rsi(candles[:idx_l2+1])
-        is_divergence = (p_low_2 < p_low_1 and rsi_l2 > rsi_l1 + 3.0 and rsi_l2 < 45.0)
+        is_divergence = (p_low_2 < p_low_1 and rsi_l2 > rsi_l1 + 2.5 and rsi_l2 < 48.0)
 
-        # Geometría 3: Compresión de Volatilidad (Squeeze)
-        recent_ranges = [((c["high"] - c["low"]) / c["open"]) * 100.0 for c in candles[-6:-1]]
-        avg_squeeze_range = (sum(recent_ranges) / len(recent_ranges)) if recent_ranges else 3.0
-        is_squeeze = avg_squeeze_range < 1.8
-
-        # Geometría 4: Doble Suelo Local (W-Bottom)
-        recent_lows = [c["low"] for c in candles[-12:]]
-        l1 = min(recent_lows[:6])
-        l2 = min(recent_lows[6:])
-        is_w_bottom = (abs(l1 - l2) / l1 <= 0.008) if l1 > 0 else False
-
-        # --- MOTOR DE PUNTUACIÓN DE ALTA CONVICCIÓN ---
+        # --- MOTOR DE PUNTUACIÓN DE SWING TRADING ---
         score = 35.0
 
-        # Filtro Anti-FOMO RSI
-        if rsi_val > 75.0:
+        # Filtro Anti-FOMO RSI 4H
+        if rsi_val > 72.0:
             score -= 30.0
 
-        # Bonificación por Geometría Avanzada
-        if is_sweep:
-            score += 35.0  # +35 Pts por Barrido Institucional de 4H
+        # Bonificación por Geometría Swing 4H
+        if is_swing_sweep:
+            score += 35.0  # +35 Pts por Barrido de Mínimos de 7 Días
         if is_divergence:
-            score += 30.0  # +30 Pts por Divergencia Alcista RSI
+            score += 30.0  # +30 Pts por Divergencia Alcista en 4H
 
-        # Bonificación por Pico de Volumen Institucional (>= 2.5x)
-        if volume_ratio >= 2.5 and c_close >= c_open:
+        # Bonificación por Volumen Institucional 4H (>= 1.8x)
+        if volume_ratio >= 1.8 and c_close >= c_open:
             score += 20.0
-        elif volume_ratio >= 2.0:
+        elif volume_ratio >= 1.5:
             score += 10.0
 
-        # Bonificación por Absorción de Mecha (Wick >= 40%)
-        if wick_ratio >= 0.40:
+        # Bonificación por Absorción de Mecha 4H (Wick >= 35%)
+        if wick_ratio >= 0.35:
             score += 15.0
-
-        # Bonificación por Geometría Complementaria
-        if is_squeeze:
-            score += 10.0
-        if is_w_bottom:
-            score += 10.0
 
         score = max(0.0, min(100.0, round(score, 1)))
 
         signal = "NEUTRAL"
-        if score >= 75.0:
-            signal = "ABSORCION_ALCISTA 🟢"
+        if score >= 70.0:
+            signal = "ABSORCION_ALCISTA"
         elif score <= 35.0:
-            signal = "RIESGO_ALTO 🔴"
+            signal = "RIESGO_ALTO"
 
         return {
             "ticker": crypto_item["ticker"],
