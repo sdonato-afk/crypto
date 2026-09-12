@@ -171,9 +171,10 @@
 
         /* KPI METRICS */
         .stats-grid {
-            display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px;
+            display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-bottom: 24px;
         }
-        @media(max-width: 900px) { .stats-grid { grid-template-columns: repeat(2, 1fr); } }
+        @media(max-width: 1200px) { .stats-grid { grid-template-columns: repeat(3, 1fr); } }
+        @media(max-width: 768px) { .stats-grid { grid-template-columns: repeat(2, 1fr); } }
         .stat-card {
             background: var(--bg-card); border: 1px solid var(--border-color);
             border-radius: var(--radius-lg); padding: 16px; text-align: center;
@@ -333,7 +334,7 @@
         <div class="btc-card" id="btc-card-block">
             <div class="btc-header">
                 <div style="font-weight:700; display:flex; align-items:center; gap:8px;">
-                    <span style="color:var(--accent-amber);">₿</span> Bitcoin 1 Mes (30 Velas Diarias)
+                    <span style="color:var(--accent-amber);">₿</span> Bitcoin 3 Meses (Velas 4 Horas)
                 </div>
                 <div style="display:flex; align-items:center; gap:12px;">
                     <div class="btc-price" id="btc-price">$--</div>
@@ -354,6 +355,21 @@
                 <div class="stat-label">P&L Neto Flota</div>
                 <div class="stat-value" id="global-pnl" style="color:var(--accent-green);">--</div>
                 <div class="stat-sub" id="global-pnl-pct">--</div>
+            </div>
+            <div class="stat-card" id="card-start-metrics">
+                <div class="stat-label">🚀 Desde Inicio (Flota vs BTC)</div>
+                <div style="display: flex; justify-content: space-around; align-items: center; margin-top: 4px;">
+                    <div>
+                        <div style="font-size: 9px; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">Flota Equity</div>
+                        <div class="stat-value" id="fleet-launch-pct" style="font-size: 16px; color: var(--accent-green);">+0.00%</div>
+                    </div>
+                    <div style="width: 1px; height: 28px; background: var(--border-color);"></div>
+                    <div>
+                        <div style="font-size: 9px; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">Bitcoin (BTC)</div>
+                        <div class="stat-value" id="btc-launch-pct" style="font-size: 16px; color: var(--accent-amber);">+0.00%</div>
+                    </div>
+                </div>
+                <div class="stat-sub" id="launch-ref-sub" style="margin-top: 6px;">Base: $20k | BTC Ref: $--</div>
             </div>
             <div class="stat-card">
                 <div class="stat-label">Slots Operando</div>
@@ -842,6 +858,53 @@
             document.getElementById('boveda-progress-bar').style.width = goalPct + '%';
             document.getElementById('boveda-progress-pct').innerText = goalPct + '% logrado';
             document.getElementById('boveda-progress-sub').innerText = `Total Acumulado para Retiro Directo: $${totalRetiroAcumulado.toFixed(2)} USD de $5,000.00 USD objetivo mensual.`;
+
+            // Actualizar Tarjeta de Rendimiento Desde Inicio (Flota vs BTC)
+            const fleetLaunchPct = (totalPnl / 20000.0) * 100;
+            const fleetLaunchEl = document.getElementById('fleet-launch-pct');
+            if (fleetLaunchEl) {
+                fleetLaunchEl.innerText = (fleetLaunchPct >= 0 ? '+' : '') + fleetLaunchPct.toFixed(2) + '%';
+                fleetLaunchEl.style.color = fleetLaunchPct >= 0 ? 'var(--accent-green)' : 'var(--accent-rose)';
+            }
+            updateLaunchBtcMetric(timestamps);
+        }
+
+        let btcKlines = [];
+
+        function updateLaunchBtcMetric(timestamps = []) {
+            if (!btcKlines || btcKlines.length === 0) return;
+            const currentBtc = parseFloat(btcKlines[btcKlines.length - 1][4]);
+            let refBtc = parseFloat(btcKlines[0][4]); // Start of 3-month window default
+
+            if (timestamps && timestamps.length > 0) {
+                const sortedTs = [...timestamps].sort();
+                let isoStr = sortedTs[0].replace(' ', 'T');
+                if (!isoStr.endsWith('Z')) isoStr += 'Z';
+                const oldestMs = new Date(isoStr).getTime();
+                
+                let closestCandle = btcKlines[0];
+                let minDiff = Math.abs(btcKlines[0][0] - oldestMs);
+                for (let i = 1; i < btcKlines.length; i++) {
+                    const diff = Math.abs(btcKlines[i][0] - oldestMs);
+                    if (diff < minDiff) {
+                        minDiff = diff;
+                        closestCandle = btcKlines[i];
+                    }
+                }
+                refBtc = parseFloat(closestCandle[4]);
+            }
+
+            const btcPct = ((currentBtc - refBtc) / refBtc) * 100;
+            const btcLaunchEl = document.getElementById('btc-launch-pct');
+            if (btcLaunchEl) {
+                btcLaunchEl.innerText = (btcPct >= 0 ? '+' : '') + btcPct.toFixed(2) + '%';
+                btcLaunchEl.style.color = btcPct >= 0 ? 'var(--accent-amber)' : 'var(--accent-rose)';
+            }
+
+            const subEl = document.getElementById('launch-ref-sub');
+            if (subEl) {
+                subEl.innerText = `Base: $20k | BTC Ref: $${refBtc.toLocaleString('en-US', {maximumFractionDigits:0})}`;
+            }
         }
 
         async function initBtcChart() {
@@ -849,7 +912,7 @@
             const chart = LightweightCharts.createChart(container, {
                 layout: { background: { color: 'transparent' }, textColor: '#64748b' },
                 grid: { vertLines: { color: 'rgba(255,255,255,0.03)' }, horzLines: { color: 'rgba(255,255,255,0.03)' } },
-                timeScale: { borderColor: 'rgba(255,255,255,0.08)', timeVisible: false },
+                timeScale: { borderColor: 'rgba(255,255,255,0.08)', timeVisible: true },
                 rightPriceScale: { borderColor: 'rgba(255,255,255,0.08)' }
             });
             const series = chart.addCandlestickSeries({
@@ -861,8 +924,9 @@
             }).observe(container);
 
             try {
-                const res = await fetch('https://data-api.binance.vision/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=30');
+                const res = await fetch('https://data-api.binance.vision/api/v3/klines?symbol=BTCUSDT&interval=4h&limit=540');
                 const klines = await res.json();
+                btcKlines = klines;
                 series.setData(klines.map(k => ({
                     time: Math.floor(k[0]/1000), open: parseFloat(k[1]), high: parseFloat(k[2]),
                     low: parseFloat(k[3]), close: parseFloat(k[4])
@@ -872,10 +936,12 @@
                 const chg = ((last - first) / first) * 100;
                 document.getElementById('btc-price').innerText = '$' + last.toLocaleString('en-US', {maximumFractionDigits:0});
                 const b = document.getElementById('btc-change');
-                b.innerText = (chg >= 0 ? '+' : '') + chg.toFixed(2) + '%';
+                b.innerText = (chg >= 0 ? '+' : '') + chg.toFixed(2) + '% (3M)';
                 b.style.background = chg >= 0 ? 'rgba(16,185,129,0.15)' : 'rgba(244,63,94,0.15)';
                 b.style.color = chg >= 0 ? '#34d399' : '#fb7185';
                 chart.timeScale().fitContent();
+
+                updateLaunchBtcMetric();
             } catch(e) { console.warn(e); }
         }
 

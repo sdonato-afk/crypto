@@ -72,22 +72,22 @@ if any(k in service_name for k in ["nodo3", "nodo4", "nodo7", "nodob", "exotico"
         "TRAILING_LOCK_EXIT": 4.8,
         "BREAKEVEN_EXIT": 2.5
     })
-# Perfil NODO C: (Render 5, 8 -> Rebotes / Top 25-75 / TP Corto 4 / Score 65)
+# Perfil NODO C: (Render 5, 8 -> Homologado a Swing 4H / Top 1-75 / TP 10% / SL 5.5% / Score 68)
 elif any(k in service_name for k in ["nodo5", "nodo8", "nodoc", "rebote", "fo30", "uk8f"]):
     profile.update({
-        "UNIVERSE_START": 25,
+        "UNIVERSE_START": 1,
         "UNIVERSE_END": 75,
-        "MIN_SCORE_ENTRY": 65.0,
+        "MIN_SCORE_ENTRY": 68.0,
         "ENTRY_PCT": 0.50,
         "SCALE_IN_PCT": 0.10,
-        "STOP_LOSS_PCT": 4.0,
-        "TAKE_PROFIT_PCT": 4.0,
-        "TRAILING_STAGE_1": 2.5,
-        "TRAILING_STAGE_1_LOCK": 1.5,
-        "TRAILING_STAGE_2": 3.5,
-        "TRAILING_STAGE_2_LOCK": 2.0,
-        "TRAILING_LOCK_EXIT": 1.9,
-        "BREAKEVEN_EXIT": 1.5
+        "STOP_LOSS_PCT": 5.5,
+        "TAKE_PROFIT_PCT": 10.0,
+        "TRAILING_STAGE_1": 4.0,
+        "TRAILING_STAGE_1_LOCK": 2.0,
+        "TRAILING_STAGE_2": 6.5,
+        "TRAILING_STAGE_2_LOCK": 4.5,
+        "TRAILING_LOCK_EXIT": 4.4,
+        "BREAKEVEN_EXIT": 2.0
     })
 elif "nodo2" in service_name:
     profile["MIN_SCORE_ENTRY"] = 70.0
@@ -449,6 +449,28 @@ class BinanceBotEngine:
         log_message("ICEBERG", f"✅ [ICEBERG COMPLETADO] [{ticker}]: Entrada total de ${spent_accum:.2f} USD ejecutada desincronizada. Precio Promedio: ${avg_entry_price:.4f}")
         return avg_entry_price, total_qty, spent_accum
 
+    def _get_dynamic_blacklist(self):
+        """
+        Escanea el historial de trades del nodo y bloquea dinámicamente activos con performance tóxica:
+        - Criptos con 3 o más pérdidas sin ninguna victoria
+        - Criptos con Win Rate <= 15% tras al menos 3 trades
+        """
+        toxic = set()
+        asset_history = {}
+        for t in reversed(self.trade_history):
+            ticker = t.get("ticker")
+            if not ticker: continue
+            if ticker not in asset_history:
+                asset_history[ticker] = []
+            asset_history[ticker].append(t.get("result", "LOSS"))
+        
+        for ticker, results in asset_history.items():
+            wins = sum(1 for r in results if r == "WIN")
+            losses = sum(1 for r in results if r == "LOSS")
+            if (losses >= 3 and wins == 0) or (len(results) >= 3 and (wins / len(results)) <= 0.15):
+                toxic.add(ticker)
+        return toxic
+
     def open_new_slots(self, ranked_analyses):
         """Ocupa los slots libres buscando patrones de Absorción + Geometría en el Top 50-100"""
         if self.btc_guard_status["status"] == "PANIC_LOCK":
@@ -463,10 +485,15 @@ class BinanceBotEngine:
             return
 
         now = time.time()
+        dynamic_toxic = self._get_dynamic_blacklist()
 
         for analysis in ranked_analyses:
             ticker = analysis["ticker"]
             score = analysis["score"]
+
+            if ticker in dynamic_toxic:
+                log_message("BLACKLIST_DINAMICA", f"⛔ BLOQUEO AUTOMÁTICO [{ticker}]: Excluido dinámicamente por historial de pérdidas tóxicas.")
+                continue
 
             # Cooldown de 24 horas tras Stop Loss para evitar re-entradas impulsivas en caídas
             last_sl = self.last_stop_loss_timestamps.get(ticker, 0)

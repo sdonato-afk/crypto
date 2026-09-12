@@ -59,7 +59,7 @@ class CryptoAnalyzer:
                 req = urllib.request.Request(self.binance_ticker_url, headers={'User-Agent': 'Mozilla/5.0'})
                 with urllib.request.urlopen(req, timeout=8) as resp:
                     data = json.loads(resp.read().decode())
-                    # --- FILTRO CAPA 1: Excluir pares con keywords de stablecoins / apalancados ---
+                    # --- FILTRO CAPA 1: Excluir pares con keywords de stablecoins / apalancados y Monedas Tóxicas ---
                     STABLE_BASE_ASSETS = {
                         'UP', 'DOWN', 'BEAR', 'BULL', 'FDUSD', 'USDC', 'TUSD', 'EUR',
                         'USD1', 'USD2', 'USD3', 'USDS', 'USDP', 'USDX', 'USDQ',
@@ -67,10 +67,14 @@ class CryptoAnalyzer:
                         'OUSD', 'CUSD', 'GUSD', 'HUSD', 'EURS', 'EURC', 'EURI',
                         'PAX', 'AGEUR', 'AEUR', 'UST', 'USDN', 'USDT', 'WBTC', 'WETH'
                     }
+                    STATIC_TOXIC_BLACKLIST = {
+                        'BCH', 'THE', 'SEI', 'HOLO', 'XPL'
+                    }
                     usdt_pairs = [
                         d for d in data
                         if d['symbol'].endswith('USDT')
                         and d['symbol'][:-4] not in STABLE_BASE_ASSETS
+                        and d['symbol'][:-4] not in STATIC_TOXIC_BLACKLIST
                     ]
 
                     usdt_pairs.sort(key=lambda x: float(x['quoteVolume']), reverse=True)
